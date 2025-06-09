@@ -1,0 +1,10 @@
+{
+  "short_name": "Amazon Playtest Solution Demo",
+  "name": "Amazon Playtest solution demo",
+  "icons": [
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

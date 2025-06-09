@@ -1,0 +1,56 @@
+{
+  "name": "playtesting-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@aws-amplify/ui-react": "^6.5.5",
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/credential-providers": "^3.750.0",
+    "@cloudscape-design/chat-components": "^1.0.22",
+    "@cloudscape-design/component-toolkit": "^1.0.0-beta.75",
+    "@cloudscape-design/components": "^3.0.862",
+    "@cloudscape-design/design-tokens": "^3.0.45",
+    "@cloudscape-design/global-styles": "^1.0.32",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.7.9",
+    "@types/react-dom": "^18.3.1",
+    "aws-amplify": "^6.14.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.1",
+    "react-scripts": "^5.0.1",
+    "typescript": "^4.9.5"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@types/react": "^18.3.18"
+  },
+  "overrides": {
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.39"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
