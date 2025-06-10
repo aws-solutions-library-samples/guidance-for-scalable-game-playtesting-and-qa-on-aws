@@ -27,47 +27,26 @@ The Application is deployed through 2 cdk stacks:
 
 ### Deployment
 
-1. Download the latest gamecast aware `aws-sdk` from the Amazon GameCast Console.
+1. Download the latest gamelift streams aware `aws-sdk` from the Amazon GameLift Streams Console.
 2. Unzip and copy the `aws-sdk` folder to the folder `dependencies` in this project.
 3. Run `npm install npm-run-all --save-dev` and run `npm run install-all` in the root of this project to install dependencies in all subprojects and lambdas. [CDK Bootstrap if you have not previously deployed infrastructure using cdk into your AWS account.](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html).
-4. Run `cdk deploy GameCastDemoApiStack` to deploy the API and get the ouputs required for the frontend build.
-4. Update the AWS Amplify SDK configuration in the `demo-frontend/src/App.tsx` with the API endpoint and the userpool and client ID from the output. Ensure that the API endpoint has no trailing slash `/` at the end.
-5. Run `npm run build-all` in the root of the project to build the single page application fronend.
-6. Run `cdk deploy GameCastDemoFrontendStack` to deploy the frontend.
-7. Once everything is deployed, you need to add meta information about your StreamGroup to the deployed DynamoDB table. For each of your stream groups, add the `streamgroup Identifer` as key and at minimum add `name` and `description`. If your game requires `AdditionalLaunchArgs` or `AdditionalEnvironmentVariables`, provide them as a list of strings.
+4. Run `npm run deploy-all --user=ADMIN_USERNAME --password=ADMIN_PASSWORD --email=USER@example.com --PTuser=PLAYTESTER_USERNAME --PTpassword=PLAYTESTER_PASSWORD --PTemail=PLAYTESTER@example.com` to deploy the entire solution.
+5. Use the URL in the output options when deployment is complete to access the admin portal.  You will also need this URL for the discord bot along with ApiKey that you'll need to get from API Gateway.  Install time should take 15-20 minutes.
 
-_Once everything has been deployed once and the frontend has the right parameters, you can use `cdk deploy GameCastDemoFrontendStack` to redeploy both stacks in a single step when developing as the frontend has a dependency to the backend stack._
+### Bot Setup instructions
 
-### Creating an Applications and Stream Groups
+TODO:
 
-Please follow the instructions of the Amazon GameCast developer documentation found in the Amazon GameCast AWS console.
+## Exploring the solution installation
 
-## Adding StreamGroups and Applications
-
-To add a StreamGroup and Application to the demo, you need to add meta information to the created Amazon DynamoDB table. The `ListGames` Lambda functions will pick up any changes done to the DynamoDB automatically. This allows you to hide/show certain stream groups and applications by adding or removing them from DynamoDB.
-
-The meta data structure looks like this:
-
-```json
-{
-  "sgId": "<sg-id>", // the stream groups id
-  "appId": "<app-id>", // The applications id - it need to be the SG
-  "region": "eu-central-1", // the region is crucial so that the start stream session lambda uses this region to create the GameCast client to start the stream session
-  "AdditionalLaunchArgs": [ // optional launch arguments
-  ],
-  "AdditionalEnvironmentVariables": [ // optional environment variables
-  ],
-  "description": "Lyra is a learning resource designed as a sample game project to help you understand the frameworks of Unreal Engine 5 (UE5). Its architecture is designed to be modular, including a core system and plugins that are updated regularly along with the development of UE5.",
-  "name": "Lyra UE5 Sample Game"
-}
-```
-
-Required fields: **sgId**, **appId**, **region**, **name**, **description**
+You should have two CDK stacks installed.  The first within us-east-1 and second in us-east-2 (both by default).  The backendstack should install:  DynamoDB, Statemachine (step functions), parameter store values, APIGW, WAF, Cognito users/applicaton/pool, and Lambdas.  The frontendstack should deploy the single page application (SPA) to S3 along with cloudfront.
 
 ## Frontend Development
 
-Once the API stack is deployed and you have update the Amplify config values in `App.tsx`, you can use `npm start` in the `demo-frontend` to run the frontend locally with the API in the cloud to accelerate your frontend development without the need of redeployment for every code change.
+Once the API stack is deployed and you have update the Amplify config values in `App.tsx`, you can use `npm start` in the `frontend` to run the frontend locally with the API in the cloud to accelerate your frontend development without the need of redeployment for every code change.
 
-## Updating the GameCast WebSDK
+## NOTES
 
-The WebSDK used can be found in `demo-frontend/src/gamecastsdk/`. You can update the files to a newer version. New versions may require code changes in `demo-frontend/src/components/game.tsx`.
+1.  Out of the box the solution is installed to both us-east-1 (frontendstack) and us-east-2 (backendstack)
+2.  If using GenAI Summarization option you will need to grant the account region (and cross reference region) access to the model being used with Amazon Bedrock.  Currently, be default we are using Claude 3 Haiku.  If you wish to change this, please be sure to change the model within the GenAISummary lambda as well.
+3.  When supplying passwords during install process make sure they fit the cognito requirements or confirmation of those accounts will fail.
