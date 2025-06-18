@@ -99,7 +99,6 @@ class GamePT extends React.Component<GameProps, GameState> {
                 */
             }
         });
-
     }
 
     async createStreamSession() {

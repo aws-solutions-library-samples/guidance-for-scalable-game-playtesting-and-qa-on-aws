@@ -4,6 +4,7 @@ import ChatBubble from "@cloudscape-design/chat-components/chat-bubble";
 import PromptInput from "@cloudscape-design/components/prompt-input";
 import Avatar from "@cloudscape-design/chat-components/avatar";
 import { post, ApiError } from "aws-amplify/api";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 interface AISummaryChatProps {
     observations: { id: string; observation: string; response: string }[];
@@ -57,11 +58,12 @@ class AISummaryChat extends React.Component<AISummaryChatProps, AISummaryChatSta
         try {
             const restOperation = post({
                 apiName: "playtesting-api",
-                path: "/playtestgeneratesummary",
+                path: "/aisummary",
                 options: {
                     body: payload,
                     headers: {
                         "Content-Type": "application/json",
+                        Authorization: `Bearer ${(await fetchAuthSession()).tokens?.idToken?.toString()}`
                     },
                 },
             });

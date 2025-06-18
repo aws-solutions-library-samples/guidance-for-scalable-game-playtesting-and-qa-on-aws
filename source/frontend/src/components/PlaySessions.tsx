@@ -262,6 +262,8 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                 selectedSessionID: null,
                 selectedSessionData: null,
             }));
+
+            this.props.navigate("/psessions"); //Redirect back to PlaySessions after submission
         } catch (error) {
             console.error("Error deleting playtest session:", JSON.stringify(error));
         }

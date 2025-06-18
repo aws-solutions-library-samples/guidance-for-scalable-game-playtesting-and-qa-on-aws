@@ -105,14 +105,15 @@ class ObservationList extends React.Component<ObservationListProps, ObservationL
         };
 
         try {
-
+            //alert(JSON.stringify(requestBody));
             const restOperation = post({
                 apiName: "playtesting-api",
-                path: "/playtesters",
+                path: "/playtester",
                 options: {
                     body: requestBody as unknown as FormData, //Type casting to avoid TypeScript error
                     headers: {
                         "Content-Type": "application/json",
+                        Authorization: `Bearer ${(await fetchAuthSession()).tokens?.idToken?.toString()}`
                     },
                 },
             });

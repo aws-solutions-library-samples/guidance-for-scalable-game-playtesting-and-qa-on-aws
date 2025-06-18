@@ -104,7 +104,7 @@ export const handler = async (event) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                playtestURL: parameterStoreURL + "playtest?id=" + hashedPlaytester + "&sessionId=" + playtestsessionId,
+                playtestURL: "https://" + parameterStoreURL + "/playtest?id=" + hashedPlaytester + "&sessionId=" + playtestsessionId,
                 username: playtesterUsername,
                 password: playtesterPassword
             }),
