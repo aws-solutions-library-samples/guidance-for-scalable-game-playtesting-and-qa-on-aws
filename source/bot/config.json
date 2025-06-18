@@ -1,0 +1,8 @@
+{
+	"token": "YOUR-TOKEN-HERE",
+	"clientId": "YOUR-DISCORD-CLIENTID-HERE",
+	"guildId": "YOUR-DISCORD-GUILDID-HERE",
+	"apiBaseUrl": "YOUR-API-URL-HERE",
+	"apiKey": "YOUR-API-KEY-HERE",
+	"playtestSessionID": "YOUR-PLAYTESTSESSIONID-HERE"
+}
