@@ -13,30 +13,34 @@ import { WithAuthenticatorProps } from "@aws-amplify/ui-react/dist/types/compone
 import { ApiError, get } from 'aws-amplify/api';
 import ObservationList from "./ObservationList";
 import { fetchAuthSession } from "aws-amplify/auth";
+import { parse } from "node:path/posix";
 
 interface ApplicationProps {
     signOut: any
 }
 
 interface ApplicationState {
-    selectedRegions: string[],
-    regions: { label: string, value: string, description: string }[]
+    gameAppId: string,
+    gameSgId: string,
+    gameKey: string,
+    gameObservations: string
 }
-
-//Needed for auto playing stream after validating playtester
-let gameAppId = "";
-let gameSgId = "";
-let gameKey = "";
-
-//needed for playtesting observations
-let gameObservations = "";
 
 class ApplicationPT extends React.Component<ApplicationProps & WithAuthenticatorProps, ApplicationState> {
     constructor(props: ApplicationProps) {
         super(props);
-
-        this.isPlayerValid();
+        this.state = {
+            gameAppId: "",
+            gameSgId: "",
+            gameKey: "",
+            gameObservations: ""
+        }
         
+        
+    }
+
+    componentDidMount() {
+        this.isPlayerValid();
     }
    
         async isPlayerValid() {
@@ -63,19 +67,17 @@ class ApplicationPT extends React.Component<ApplicationProps & WithAuthenticator
 
                 //if sessionId is not null then assign its value to gameKey
                 if (sessionId != null) {
-                    gameKey = sessionId;
-
+                    this.setState({ gameKey: sessionId });
+                    
                     //I need to split the sessionId by - into two different string.  The first being gameAppId and the Second being gameSgId.
                     const sessionIdSplit = sessionId.split("--");
-                    gameAppId = sessionIdSplit[1];
-                    gameSgId = sessionIdSplit[0];
-
+                    this.setState({ gameAppId: sessionIdSplit[1], gameSgId: sessionIdSplit[0] });
                 }
 
                 //Now we need to get any observations that a playtester will supply comments on
                 const restOperation2 = get({
                     apiName: "playtesting-api",
-                    path: "/playtestsessionobservations/?id=" + gameKey,
+                    path: "/playtestsessionobservations/?id=" + sessionId,
                     options: {
                         headers: {
                             'Content-Type': 'application/json',
@@ -85,7 +87,7 @@ class ApplicationPT extends React.Component<ApplicationProps & WithAuthenticator
                 })
                 //Now i need to get the response and print it out in an alert
                 let { body: body2 } = await restOperation2.response;
-                gameObservations = await body2.text();
+                this.setState({ gameObservations: await body2.text() });
             }
 
 
@@ -111,15 +113,11 @@ class ApplicationPT extends React.Component<ApplicationProps & WithAuthenticator
     render() {
 
         let parsedObservations: { observation: string; id: string; response: string; }[] = [];
-        if (gameObservations && typeof gameObservations === "string" && gameObservations.trim() !== "") {
+        if (this.state.gameObservations && typeof this.state.gameObservations === "string" && this.state.gameObservations.trim() !== "") {
 
             //First, parse the outer JSON object
-            const parsedObject = JSON.parse(gameObservations);
-
-
-            //Then, parse the inner "Observations" string (fix single quotes first)
-            const cleanedJsonString = parsedObject.Observations.replace(/'/g, '"'); // Convert single quotes to double quotes
-            parsedObservations = JSON.parse(cleanedJsonString);
+            const parsedObject = JSON.parse(this.state.gameObservations);
+            parsedObservations = parsedObject.Observations;
         }
 
         return (
@@ -127,8 +125,8 @@ class ApplicationPT extends React.Component<ApplicationProps & WithAuthenticator
                     toolsHide={true}
                 navigationHide={true}
                 contentType = "table"
-                    content={<GamePT key={gameKey} gameName="Playtesting Session" gameDescription="Please fill out your testing outcomes and observations down below as you play." appId={gameAppId}
-                        sgId={gameSgId} region="us-east-2" setError={this.setError} /> }
+                    content={<GamePT key={this.state.gameKey} gameName="Playtesting Session" gameDescription="Please fill out your testing outcomes and observations down below as you play." appId={this.state.gameAppId}
+                        sgId={this.state.gameSgId} region="us-east-2" setError={this.setError} /> }
                     splitPanel={
                         <SplitPanel header="Testing Outcomes" >
                             <ObservationList observations={parsedObservations} />

@@ -650,7 +650,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add more permissions to the policy for dynamodb:PutItem action
         playtesters.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
-            actions: ["dynamodb:PutItem", "dynamodb:GetItem"],
+            actions: ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem"],
             resources: [playtestertable.tableArn]
         }))
 
