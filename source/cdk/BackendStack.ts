@@ -71,7 +71,7 @@ export class PlaytestingApiStack extends cdk.Stack {
     private createStepFunctions(playtestsessiontable: ddb.Table): sfn.StateMachine {
         // Lambda to update DynamoDB status to ERROR
         const StepFunctionUpdateStatusLambda = new lambda.Function(this, 'StepFunctionUpdateStatusLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionUpdateStatus'), // path to your lambda function
             handler: 'PlayTestStepFunctionUpdateStatus.handler',
             timeout: Duration.seconds(30),
@@ -82,10 +82,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //Lambda to call GameLift Streams GetApplication
         const StepFunctionGetApplicationLambda = new lambda.Function(this, 'PlayTestGetGLAppStatus', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             code: lambda.Code.fromAsset('lambdas/PlayTestGetGLAppStatus'), // path to your lambda function
             handler: 'PlayTestGetGLAppStatus.handler',
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "GAMELIFT_REGION": 'us-east-2'
             }
@@ -93,21 +93,21 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //need to create lambda function that creates a stream gorup
         const StepFunctionCreateStreamGroupLambda = new lambda.Function(this, 'PlayTestStepFunctionCreateStreamGroupLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestStepFunctionCreateStreamGroup.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionCreateStreamGroup'),
-            timeout: cdk.Duration.seconds(30),
+            timeout: cdk.Duration.seconds(10), // Lower timeout to prevent resource exhaustion
         });
 
         //function to check for when stream group is finished creating
         const getStreamGroupStatusLambda = new lambda.Function(this, 'PlayTestStepFunctionGetSreamGroupLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestStepFunctionGetSreamGroup.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionGetSreamGroup'),
         });
 
         const associateApplicationLambda = new lambda.Function(this, 'PlayTestAssociateApplicationLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestAssociateApplication.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestAssociateApplication'),
         });
@@ -159,7 +159,7 @@ export class PlaytestingApiStack extends cdk.Stack {
             lambdaFunction: StepFunctionCreateStreamGroupLambda,
             resultPath: '$.streamGroup',
             payloadResponseOnly: true,
-            timeout: Duration.seconds(30), // match the Lambda timeout
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
         });
 
         const getStreamGroupStatusInitial = new tasks.LambdaInvoke(this, 'GetStreamGroupStatusInitial', {
@@ -248,7 +248,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         const definition = getAppStatus.next(checkInitialStatus);
 
        const stepFunction = new sfn.StateMachine(this, 'PlayTestingGameLiftStreamSetup', {
-            definition,
+           definitionBody: sfn.DefinitionBody.fromChainable(definition),
             timeout: cdk.Duration.minutes(15),
         });
 
@@ -393,9 +393,11 @@ export class PlaytestingApiStack extends cdk.Stack {
         const userPoolClient = new cognito.UserPoolClient(this, 'playtesting-user-pool-client', {
             userPool: userPool,
             authFlows: {userPassword: true, userSrp: true},
-            refreshTokenValidity: Duration.hours(8),
+            refreshTokenValidity: Duration.hours(1),
             idTokenValidity: Duration.minutes(5),
             accessTokenValidity: Duration.minutes(5),
+            preventUserExistenceErrors: true,  // Helps prevent user enumeration
+            enableTokenRevocation: true,  // Allows revoking tokens if compromise is detected
         })
 
         new CfnOutput(this, "User-Pool-Id", {
@@ -450,10 +452,10 @@ export class PlaytestingApiStack extends cdk.Stack {
         })
 
         const PTGLStreamLambda = new lambda.Function(this, 'PTGLStreamLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestStartStream.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStartStream'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "CONNECTION_TIMEOUT": "10"
             },
@@ -484,7 +486,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // list all available games from DynamoDB
         const getStreamSessionLambda = new lambda.Function(this, 'gamelift-streams-get-stream-session-lambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestGetStream.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetStream'),
             timeout: cdk.Duration.seconds(10),
@@ -512,10 +514,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // register a playtester
         const registerPlayer = new lambda.Function(this, 'PlaytesterRegister', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayerRegistration.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestRegisterPlayer'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "PLAYTESTERS_TABLE": playtestertable.tableName
             },
@@ -551,10 +553,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // generate summary
         const generateAISummaryLambda = new lambda.Function(this, 'PlaytestGenerateSummary', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlaytestGenerateSummary.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGenerateSummary'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             logGroup: lambdaLogGroup
         });
 
@@ -579,10 +581,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // get buckets
         const getBucketsLambda = new lambda.Function(this, 'GetBucketsLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestGetBuckets.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetBuckets'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             logGroup: lambdaLogGroup
         });
 
@@ -607,10 +609,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // get buckets
         const getBucketObjectsLambda = new lambda.Function(this, 'GetBucketObjectsLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestGetBucketObjects.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetBucketObjects'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             logGroup: lambdaLogGroup
         });
 
@@ -635,10 +637,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // register a playtester
         const playtesters = new lambda.Function(this, 'Playtesters', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'Playtesters.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTesters'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "PLAYTESTERS_TABLE": playtestertable.tableName
             },
@@ -675,10 +677,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // validate a playtester
         const validatePlayer = new lambda.Function(this, 'PlaytesterValidate', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayerValidate.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTesterValidation'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "PLAYTESTERS_TABLE": playtestertable.tableName
             },
@@ -709,10 +711,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // setting up lambda
         const playtestSessionLambda = new lambda.Function(this, 'PlayTestSessionsLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestSessions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestSessions'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName,
                 "STEP_FUNCTION_ARN":  stepFunction.stateMachineArn
@@ -779,10 +781,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //setting up lambda
         const playtestSessionObsLambda = new lambda.Function(this, 'playtestSessionObsLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestObservations.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestObservations'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
                 "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName
             },
@@ -812,10 +814,10 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //setting up lambda
         const PlayTestGLSListApplicationsLambda = new lambda.Function(this, 'PlayTestGLSListApplicationsLambda', {
-            runtime: lambda.Runtime.NODEJS_20_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlayTestGLSListApplications.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGLSListApplications'),
-            timeout: Duration.seconds(30),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             logGroup: lambdaLogGroup
         });
 
@@ -856,6 +858,8 @@ export class PlaytestingApiStack extends cdk.Stack {
                 status: true,
                 user: false,
             }),
+            throttlingRateLimit: 1000,    // Global steady state
+            throttlingBurstLimit: 2000,   // Global burst
         });
 
         new CfnOutput(this, "Endpoint", {
@@ -1132,10 +1136,8 @@ export class PlaytestingApiStack extends cdk.Stack {
     }
 
     private createWebACL(stage: apigateway.Stage) {
-        // create a basic ACL with AWSManagedRulesCommonRuleSet and AWSManagedRulesAmazonIpReputationList
-        // basic rule https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html
         const acl = new wafv2.CfnWebACL(this, 'waf-web-acl', {
-            defaultAction: {allow: {}},
+            defaultAction: { allow: {} },
             scope: 'REGIONAL',
             visibilityConfig: {
                 cloudWatchMetricsEnabled: true,
@@ -1143,59 +1145,104 @@ export class PlaytestingApiStack extends cdk.Stack {
                 sampledRequestsEnabled: true,
             },
             name: 'playtesting-api-waf',
-            rules: [{
-                name: 'CRSRule',
-                priority: 0,
-                statement: {
-                    managedRuleGroupStatement: {
-                        name: 'AWSManagedRulesCommonRuleSet',
-                        vendorName: 'AWS'
-                    }
+            rules: [
+                {
+                    name: 'CRSRule',
+                    priority: 0,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesCommonRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastAPI-CRS',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    metricName: 'MetricForGameCastAPI-CRS',
-                    sampledRequestsEnabled: true,
+                {
+                    name: 'IpReputation',
+                    priority: 1,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesAmazonIpReputationList',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastAPI-IpReputation',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                overrideAction: {
-                    none: {}
+                {
+                    name: 'throttle-extensive-users',
+                    priority: 2,
+                    statement: {
+                        rateBasedStatement: {
+                            aggregateKeyType: "IP",
+                            limit: 100,
+                            evaluationWindowSec: 60,
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        sampledRequestsEnabled: true,
+                        metricName: 'MetricForGameCastCF-ThrottleExtensiveUsers',
+                    },
+                    action: { block: {} },
                 },
-            }, {
-                name: 'IpReputation',
-                priority: 1,
-                statement: {
-                    managedRuleGroupStatement: {
-                        name: 'AWSManagedRulesAmazonIpReputationList',
-                        vendorName: 'AWS'
-                    }
+                {
+                    name: 'SQLiRuleSet',
+                    priority: 3,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesSQLiRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastAPI-SQLi',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    metricName: 'MetricForGameCastAPI-IpReputation',
-                    sampledRequestsEnabled: true,
+                {
+                    name: 'KnownBadInputs',
+                    priority: 4,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesKnownBadInputsRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastAPI-KnownBadInputs',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                overrideAction: {
-                    none: {}
-                },
-            }, {
-                name: 'throttle-extensive-users',
-                priority: 2,
-                statement: {
-                    rateBasedStatement: {
-                        aggregateKeyType: "IP",
-                        limit: 100,
-                        evaluationWindowSec: 60,
-                    }
-                },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    sampledRequestsEnabled: true,
-                    metricName: 'MetricForGameCastCF-ThrottleExtensiveUsers',
-                },
-                action: {
-                    block: {}
-                },
-            }]
+                {
+                    name: 'GeographicRestrictions',
+                    priority: 5,
+                    statement: {
+                        geoMatchStatement: {
+                            countryCodes: ['US', 'CA']
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastAPI-GeoRestriction',
+                        sampledRequestsEnabled: true,
+                    },
+                    action: { count: {} },
+                }
+            ]
         });
         acl.addDeletionOverride(cdk.RemovalPolicy.DESTROY)
         // attach the ACL to a given stage

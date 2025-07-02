@@ -38,7 +38,10 @@ export class PlaytestingFrontendStack extends cdk.Stack {
         const distribution = new cloudfront.Distribution(this, 'Playtesting-distribution', {
             comment: "Playtesting Distribution",
             defaultBehavior: {
-                origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket)
+                origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
+
+                // Force redirect to HTTPS
+                viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             },
             defaultRootObject: "index.html",
             minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
@@ -115,10 +118,8 @@ export class PlaytestingFrontendStack extends cdk.Stack {
     }
 
     private createWebACL() {
-        // create a basic ACL with AWSManagedRulesCommonRuleSet and AWSManagedRulesAmazonIpReputationList
-        // basic rule https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html
         const acl = new wafv2.CfnWebACL(this, 'cf-waf', {
-            defaultAction: {allow: {}},
+            defaultAction: { allow: {} },
             scope: 'CLOUDFRONT',
             visibilityConfig: {
                 cloudWatchMetricsEnabled: true,
@@ -126,59 +127,104 @@ export class PlaytestingFrontendStack extends cdk.Stack {
                 sampledRequestsEnabled: true,
             },
             name: 'playtesting-cf-waf',
-            rules: [{
-                name: 'CRSRule',
-                priority: 0,
-                statement: {
-                    managedRuleGroupStatement: {
-                        name: 'AWSManagedRulesCommonRuleSet',
-                        vendorName: 'AWS'
-                    }
+            rules: [
+                {
+                    name: 'CRSRule',
+                    priority: 0,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesCommonRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastCF-CRS',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    metricName: 'MetricForGameCastCF-CRS',
-                    sampledRequestsEnabled: true,
+                {
+                    name: 'IpReputation',
+                    priority: 1,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesAmazonIpReputationList',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastCF-IpReputation',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                overrideAction: {
-                    none: {}
+                {
+                    name: 'throttle-extensive-users',
+                    priority: 2,
+                    statement: {
+                        rateBasedStatement: {
+                            aggregateKeyType: "IP",
+                            limit: 100,
+                            evaluationWindowSec: 60,
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        sampledRequestsEnabled: true,
+                        metricName: 'MetricForGameCastCF-ThrottleExtensiveUsers',
+                    },
+                    action: { block: {} },
                 },
-            }, {
-                name: 'IpReputation',
-                priority: 1,
-                statement: {
-                    managedRuleGroupStatement: {
-                        name: 'AWSManagedRulesAmazonIpReputationList',
-                        vendorName: 'AWS'
-                    }
+                {
+                    name: 'SQLiRuleSet',
+                    priority: 3,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesSQLiRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastCF-SQLiRuleSet',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    metricName: 'MetricForGameCastCF-IpReputation',
-                    sampledRequestsEnabled: true,
+                {
+                    name: 'KnownBadInputs',
+                    priority: 4,
+                    statement: {
+                        managedRuleGroupStatement: {
+                            name: 'AWSManagedRulesKnownBadInputsRuleSet',
+                            vendorName: 'AWS'
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastCF-KnownBadInputs',
+                        sampledRequestsEnabled: true,
+                    },
+                    overrideAction: { none: {} },
                 },
-                overrideAction: {
-                    none: {}
-                },
-            }, {
-                name: 'throttle-extensive-users',
-                priority: 2,
-                statement: {
-                    rateBasedStatement: {
-                        aggregateKeyType: "IP",
-                        limit: 100,
-                        evaluationWindowSec: 60,
-                    }
-                },
-                visibilityConfig: {
-                    cloudWatchMetricsEnabled: true,
-                    sampledRequestsEnabled: true,
-                    metricName: 'MetricForGameCastCF-ThrottleExtensiveUsers',
-                },
-                action: {
-                    block: {}
-                },
-            }]
+                {
+                    name: 'GeographicRestrictions',
+                    priority: 5,
+                    statement: {
+                        geoMatchStatement: {
+                            countryCodes: ['US', 'CA']
+                        }
+                    },
+                    visibilityConfig: {
+                        cloudWatchMetricsEnabled: true,
+                        metricName: 'MetricForGameCastCF-GeoRestriction',
+                        sampledRequestsEnabled: true,
+                    },
+                    action: { count: {} },
+                }
+            ]
         });
         acl.addDeletionOverride(cdk.RemovalPolicy.DESTROY)
         return acl
