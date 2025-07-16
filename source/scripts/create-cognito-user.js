@@ -1,4 +1,4 @@
-const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const fs = require("fs");
 const path = require("path");
 
@@ -63,6 +63,15 @@ async function createUser() {
             Permanent: true
         }));
 
+        // Step 3: Add the user to a group
+        let groupName = "Admin"; // You can pass this as an argument or set it dynamically
+        await cognitoClient.send(new AdminAddUserToGroupCommand({
+            UserPoolId: userPoolId,
+            Username: username,
+            GroupName: groupName
+        }));
+        console.log(`User '${username}' added to group '${groupName}' successfully.`);
+
         //Do it again for Playtester
         await cognitoClient.send(new AdminCreateUserCommand({
             UserPoolId: userPoolId,
@@ -81,8 +90,17 @@ async function createUser() {
             Password: playtestPassword,
             Permanent: true
         }));
-
         console.log(`Password set successfully for '${playtestUsername}'.`);
+
+        // Step 3: Add the user to a group
+        groupName = "Playtester"; // You can pass this as an argument or set it dynamically
+        await cognitoClient.send(new AdminAddUserToGroupCommand({
+            UserPoolId: userPoolId,
+            Username: playtestUsername,
+            GroupName: groupName
+        }));
+        console.log(`User '${playtestUsername}' added to group '${groupName}' successfully.`);
+
     } catch (error) {
         console.error("Error:", error);
     }
