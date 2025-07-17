@@ -74,19 +74,19 @@ While the backend stack can technically be deployed to any region, it should be 
 
 1. Clone the repo using command:
 
-- ```git clone https://github.com/aws-solutions-library-samples/guidance-for-scalable-game-playtesting-and-qa-on-aws.git```
+ ```git clone https://github.com/aws-solutions-library-samples/guidance-for-scalable-game-playtesting-and-qa-on-aws.git```
 
 2. Change directory to the repo folder:
 
-- ```cd <repo-name>/source```
+ ```cd <repo-name>/source```
 
 3. Install dependencies in all subprojects and Lambda functions:
 
-- ```npm run install-all```
+ ```npm run install-all```
 
 4. Run the following command to deploy the entire solution (except the Discord Bot):
 
-- ```npm run deploy-all --user=ADMIN_USERNAME --password=ADMIN_PASSWORD --email=USER@example.com --PTuser=PLAYTESTER_USERNAME --PTpassword=PLAYTESTER_PASSWORD --PTemail=PLAYTESTER@example.com``` 
+ ```npm run deploy-all --user=ADMIN_USERNAME --password=ADMIN_PASSWORD --email=USER@example.com --PTuser=PLAYTESTER_USERNAME --PTpassword=PLAYTESTER_PASSWORD --PTemail=PLAYTESTER@example.com``` 
 
 5. Use the URL in the output options when deployment is complete to access the admin portal. You will also need this URL for the Discord bot, along with an ApiKey from AWS API Gateway. Install time should take 15-20 minutes.
 
