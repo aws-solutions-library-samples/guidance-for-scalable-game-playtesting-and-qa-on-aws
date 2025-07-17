@@ -105,19 +105,19 @@ Currently, the solution guidance is shipped with Cognito and two accounts will b
 
   - "What areas should we focus our next development cycle based upon playtesters' feedback?"
 
-![](assets/AdminHomePage.png)
+![](assets/AdminHomePage.PNG)
 
 - Manage Play Sessions - This view allows users to perform CRUD operations on playtest sessions.  If there are no sessions to edit you can click on the "Create New" button to start a creation wizard process.  If there are play sessions to pick from you can select one and immediately edit options become available.  When creating new play sessions make note that behind the scenes AWS is spinning up a new stream group in your account and this proccess can take a few minutes.
 
-![](assets/ManagePlaySessions.png)
+![](assets/ManagePlaySessions.PNG)
 
 Note:  When creating a new playtest session Step 2 gives you an option for "Add New Game" or "Select Existing Game"  If you haven't previously added an "application" to GameLift Streams nor previously "Add New Game" when creating an earlier playtest session; you will need to select "Add New Game."  We require that your game binaries are located in an S3 bucket before hand.  Tip:  May consider having your CI/CD process deposit game builds into this S3 location to make this process easier.
 
-![](assets/AddNewGame.png)
+![](assets/AddNewGame.PNG)
 
 Note:  By default on Step 3 the stream configuration has us-east-2 (which is Ohio) with an always-on capacity and on-demand capacity of 1.  Each location allows you to allocate capacity in.  The capacity would be available playtesters streaming your game.  For example, if you have a playtest session for next weekend and are expecting 100 players you might want to set an "On-Demand" capacity to 100 and "Always-On' at 0.  Or mix and match with 50/50.
 
-![](assets/StreamingDetails.png)
+![](assets/StreamingDetails.PNG)
 
 
 ## Next Steps
