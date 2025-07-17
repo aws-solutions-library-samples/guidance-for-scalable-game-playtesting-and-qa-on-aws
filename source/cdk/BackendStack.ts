@@ -390,6 +390,19 @@ export class PlaytestingApiStack extends cdk.Stack {
             },
         });
 
+        // Create groups
+        const adminGroup = new cognito.CfnUserPoolGroup(this, 'AdminGroup', {
+            userPoolId: userPool.userPoolId,
+            groupName: 'Admin',
+            description: 'Admins of the application',
+        });
+
+        const playtesterGroup = new cognito.CfnUserPoolGroup(this, 'PlaytesterGroup', {
+            userPoolId: userPool.userPoolId,
+            groupName: 'Playtester',
+            description: 'Playtesters of the application',
+        });
+
         const userPoolClient = new cognito.UserPoolClient(this, 'playtesting-user-pool-client', {
             userPool: userPool,
             authFlows: {userPassword: true, userSrp: true},

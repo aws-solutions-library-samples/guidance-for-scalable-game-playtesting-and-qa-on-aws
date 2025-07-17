@@ -132,19 +132,19 @@ Home Page: The home page displays playtest sessions that have been created. You 
 - "What is the overall opinion of this playtest session based on playtesters' feedback?"
 - "What areas should we focus on in our next development cycle based on playtesters' feedback?"
 
-![](assets/AdminHomePage.png)
+![](assets/AdminHomePage.PNG)
 
 Manage Play Sessions: This view allows users to perform CRUD operations on playtest sessions. For new sessions, click the "Create New" button to start the creation wizard process. For existing sessions, select one to access edit options. Note that when creating new play sessions, AWS requires several minutes to spin up a new GameLift Streams stream group in your account.
 
-![](assets/ManagePlaySessions.png)
+![](assets/ManagePlaySessions.PNG)
 
 Note: When creating a new playtest session, Step 2 gives you the options "Add New Game" or "Select Existing Game." If you haven't previously added an "application" to GameLift Streams or previously used "Add New Game," you will need to select "Add New Game." Your game binaries must be located in an S3 bucket beforehand. Tip: Consider having your CI/CD process deposit game builds into this S3 location to streamline this process.
 
-![](assets/AddNewGame.png)
+![](assets/AddNewGame.PNG)
 
 Note: On Step 3, the default stream configuration uses us-east-2 (Ohio) with an always-on capacity and on-demand capacity of 1. Each location allows you to allocate streaming capacity for available playtesters. For example, if you have a playtest session planned for next weekend and are expecting 100 players, you might want to set the "On-Demand" capacity to 100 and "Always-On" to 0, or mix and match with 50/50.
 
-![](assets/StreamingDetails.png)
+![](assets/StreamingDetails.PNG)
 
 
 ## Next Steps
