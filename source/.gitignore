@@ -394,7 +394,6 @@ Temporary Items
 
 =======
 # Local
-.env
 dist
 node_modules
 eslint.config

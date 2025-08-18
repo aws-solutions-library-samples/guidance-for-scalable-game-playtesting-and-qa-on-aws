@@ -1,6 +1,7 @@
 const { SSMClient, PutParameterCommand } = require("@aws-sdk/client-ssm");
 const fs = require("fs");
 const path = require("path");
+require('dotenv').config();
 
 // AWS SDK Client
 const ssmClient = new SSMClient({ region: process.env.CDK_DEFAULT_REGION });
