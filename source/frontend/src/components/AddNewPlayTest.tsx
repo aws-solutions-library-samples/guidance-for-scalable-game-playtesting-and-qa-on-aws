@@ -60,6 +60,9 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
                 { location: 'us-west-1', alwaysOn: 1, onDemand: 1 },
                 { location: 'us-east-1', alwaysOn: 1, onDemand: 1 },
                 { location: 'us-east-2', alwaysOn: 1, onDemand: 1 },
+                { location: 'ap-northeast-1', alwaysOn: 1, onDemand: 1 },
+                { location: 'eu-central-1', alwaysOn: 1, onDemand: 1 },
+                { location: 'eu-west-1', alwaysOn: 1, onDemand: 1 },
             ],
             selectedLocations: ['us-east-2'], // must have at least one
             startTime: "",
