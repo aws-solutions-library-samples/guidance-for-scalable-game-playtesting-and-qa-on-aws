@@ -84,9 +84,18 @@ While the backend stack can technically be deployed to any region, it should be 
 
  ```npm run install-all```
 
-4. Run the following command to deploy the entire solution (except the Discord Bot):
+4. Open the .env file located in the source directory and replace each value then save your changes: **NOTE - For passwords make sure you use the following as guidance or installation will fail "Minimum Length 8 characters, Digits required, Upper and Lowercase required, and at least 1 symbol"**
 
- ```npm run deploy-all --user=ADMIN_USERNAME --password=ADMIN_PASSWORD --email=USER@example.com --PTuser=PLAYTESTER_USERNAME --PTpassword=PLAYTESTER_PASSWORD --PTemail=PLAYTESTER@example.com``` 
+   ```npm_config_user="ADMIN_USER"```
+   ```npm_config_password="ADMIN_PASS"```
+   ```npm_config_email="ADMIN_EMAIL"```
+   ```npm_config_PTuser="PLAYTESTING_USER"```
+   ```npm_config_PTpassword="PLAYTESTING_PASS"```
+   ```npm_config_PTemail="PLAYTESTING_EMAIL"```
+
+5. Run the following command to deploy the entire solution (except the Discord Bot):
+
+ ```npm run deploy-all``` 
 
 5. Use the URL in the output options when deployment is complete to access the admin portal. You will also need this URL for the Discord bot, along with an ApiKey from AWS API Gateway. Install time should take 15-20 minutes.
 
