@@ -38,6 +38,7 @@
     "@aws-sdk/client-ssm": "^3.775.0",
     "aws-cdk-lib": "^2.163.1",
     "constructs": "^10.4.2",
+    "dotenv": "^17.2.1",
     "source-map-support": "^0.5.21",
     "xmlhttprequest-ssl": "^2.1.1"
   }

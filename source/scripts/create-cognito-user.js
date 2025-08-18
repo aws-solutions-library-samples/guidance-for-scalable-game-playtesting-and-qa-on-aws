@@ -1,6 +1,7 @@
 const { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const fs = require("fs");
 const path = require("path");
+require('dotenv').config();
 
 // Read the CDK output file to get the User Pool ID
 const cdkOutputPath = path.join(__dirname, "../cdk-outputs.json"); // Adjust path if needed
