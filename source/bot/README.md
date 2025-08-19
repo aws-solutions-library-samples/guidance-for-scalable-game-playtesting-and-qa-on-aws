@@ -123,6 +123,11 @@ For example, if wanting to register for an existing playtesting session, users w
  The bot will then confirm if the user would like to be added to the playtesting event.
 
 If confirmed, the bot will then call the API backend using the player's global Discord username as an indentifier, register for the event, and if successful, returns the user the required login credentials as well as their uniquely created hashed URL link to connect to the playtesting stream.
+
+
+![Registered User Screenshot](/../ModifyingBotReadme/source/bot/discordBot_registered_ss_clean.png?raw=true "Registered User Screenshot")
+
+
 #### Note, the bot will send the response to the user through usage of ephemeral messaging only available to registered Discord bots to reduce phishing risk, as well as to avoid cluttering the server itself. This can also be disabled within the register command's code if preferred.
 
 ## Adding new commands to the bot
