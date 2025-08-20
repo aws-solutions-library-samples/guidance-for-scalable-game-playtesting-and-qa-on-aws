@@ -10,7 +10,7 @@ exports.handler = async function (event, context) {
             Identifier: event.applicationSelected, // required
         };
 
-        const data = await new GameLiftStreams({ region: 'us-east-2' }).send(new GetApplicationCommand(input));
+        const data = await new GameLiftStreams().send(new GetApplicationCommand(input));
 
         return {
             status: data.Status,

@@ -214,12 +214,11 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         checkStreamGroupStatusLoop
             .when(sfn.Condition.stringEquals('$.streamGroupStatus.status', 'ACTIVE'), associateApplicationStep.next(updateSuccessStatus))
-            .when(sfn.Condition.stringEquals('$.streamGroupStatus.status', 'ACTIVATING'),
-                waitForStreamGroupActive
+            .when(sfn.Condition.stringEquals('$.streamGroupStatus.status', 'ERROR'), updateErrorStatus)
+            .otherwise(waitForStreamGroupActive
                     .next(getStreamGroupStatusLoop)
                     .next(checkStreamGroupStatusLoop)
-            )
-            .when(sfn.Condition.stringEquals('$.streamGroupStatus.status', 'ERROR'), updateErrorStatus);
+            );
 
         // === AFTER CREATE: FIRST STATUS CHECK ===
 
@@ -258,7 +257,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressions(associateApplicationLambda.role!, [
             {
                 id: 'AwsSolutions-IAM4',
-                reason: 'Uses AWS managed policy for basic Lambda execution — acceptable for this utility function.'
+                reason: 'Uses AWS managed policy for basic Lambda execution ï¿½ acceptable for this utility function.'
             },
             {
                 id: 'AwsSolutions-IAM5',
@@ -268,7 +267,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressions(getStreamGroupStatusLambda.role!, [
             {
                 id: 'AwsSolutions-IAM4',
-                reason: 'Uses AWS managed policy for basic Lambda execution — acceptable for this utility function.'
+                reason: 'Uses AWS managed policy for basic Lambda execution ï¿½ acceptable for this utility function.'
             },
             {
                 id: 'AwsSolutions-IAM5',
@@ -278,7 +277,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressions(StepFunctionCreateStreamGroupLambda.role!, [
             {
                 id: 'AwsSolutions-IAM4',
-                reason: 'Uses AWS managed policy for basic Lambda execution — acceptable for this utility function.'
+                reason: 'Uses AWS managed policy for basic Lambda execution ï¿½ acceptable for this utility function.'
             },
             {
                 id: 'AwsSolutions-IAM5',
@@ -288,7 +287,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressions(StepFunctionUpdateStatusLambda.role!, [
             {
                 id: 'AwsSolutions-IAM4',
-                reason: 'Uses AWS managed policy for basic Lambda execution — acceptable for this utility function.'
+                reason: 'Uses AWS managed policy for basic Lambda execution ï¿½ acceptable for this utility function.'
             },
             {
                 id: 'AwsSolutions-IAM5',
@@ -298,7 +297,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressions(StepFunctionGetApplicationLambda.role!, [
             {
                 id: 'AwsSolutions-IAM4',
-                reason: 'Uses AWS managed policy for basic Lambda execution — acceptable for this utility function.'
+                reason: 'Uses AWS managed policy for basic Lambda execution ï¿½ acceptable for this utility function.'
             },
             {
                 id: 'AwsSolutions-IAM5',

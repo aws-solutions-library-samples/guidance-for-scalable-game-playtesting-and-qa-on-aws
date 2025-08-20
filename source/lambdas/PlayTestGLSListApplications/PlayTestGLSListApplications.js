@@ -15,7 +15,7 @@ exports.handler = async function (event, context) {
     try {
         
       //Going to list out all applications from GameLiftStreams
-      const data = await new GameLiftStreams({ region: 'us-east-2' }).send(new ListApplicationsCommand({}));
+      const data = await new GameLiftStreams().send(new ListApplicationsCommand({}));
 
         return {
           statusCode: 200,
