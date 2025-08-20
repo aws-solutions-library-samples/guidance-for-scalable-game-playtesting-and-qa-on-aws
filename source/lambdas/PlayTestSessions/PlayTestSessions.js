@@ -63,9 +63,8 @@ export const handler = async (event) => {
                 // Define the scan parameters
                 const params = {
                     TableName: process.env.PLAYTESTSESSION_TABLE,
-                    FilterExpression: "#startDate <= :today AND #endDate >= :today AND #enabled = :enabled",
+                    FilterExpression: "#endDate >= :today AND #enabled = :enabled",
                     ExpressionAttributeNames: {
-                        "#startDate": "startDate", // Name of the startDate attribute
                         "#endDate": "endDate",     // Name of the endDate attribute
                         "#enabled": "enabled",     // Name of the enabled flag
                     },
@@ -148,6 +147,8 @@ export const handler = async (event) => {
                 }
 
                 const newSession = JSON.parse(event.body);
+                // Parse the JSON body
+                const parsedBody = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
 
                 //if (!newSession.playtestingID) {
                 //    throw new Error("Missing playtestingID in the request body.");
@@ -167,7 +168,7 @@ export const handler = async (event) => {
                     const input = { // CreateApplicationInput
                         Description: newSession.game, // required
                         RuntimeEnvironment: JSON.parse(newSession.runtimeEnvironment),
-                        ExecutablePath: newSession.executionS3Path, // required
+                        ExecutablePath: newSession.executionS3Path.replace(newSession.s3Path,''), // required
                         ApplicationSourceUri: newSession.s3Path, // required
                     };
 
@@ -178,10 +179,11 @@ export const handler = async (event) => {
 
                     //Let's go ahead and set the applicationSelected to the newly created application
                     newSession.applicationSelected = appResponse.Id
-
+                    parsedBody.applicationSelected = appResponse.Id;
                 }
                 else {
                     appResponse = { Id: newSession.applicationSelected }
+                    parsedBody.applicationSelected = newSession.applicationSelected;
                 }
 
                 // Generate a unique playtestingID (or however you're generating it)
@@ -210,9 +212,6 @@ export const handler = async (event) => {
                 ////
                 //HERE we send to Step Function
                 ////
-
-                // Parse the JSON body
-                const parsedBody = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
 
                 // Add it to the payload
                 const stepFunctionPayload = {
