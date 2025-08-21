@@ -13,14 +13,14 @@ import { Amplify } from 'aws-amplify';
 Amplify.configure({
     Auth: {
         Cognito: {
-            userPoolId: "us-east-2_C2FBkGoOW",
-            userPoolClientId: "2gvvta5v4jh68fd25e188troo3"
+            userPoolId: "USERPOOL_PLACEHOLDER",
+            userPoolClientId: "CLIENTID_PLACEHOLDER"
         }
     },
     API: {
         REST: {
             "playtesting-api": {
-                endpoint: "https://dpoq2x5ici.execute-api.us-east-2.amazonaws.com/prod",
+                endpoint: "API_ENDPOINT_PLACEHOLDER",
 
             }
         }
