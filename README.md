@@ -91,7 +91,7 @@ While the backend stack can technically be deployed to any region, it should be 
  ```npm run install-all```
 
 4. (skip if already have boostrapped account).  Perform [CDK Bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html) if you have not previously deployed infrastructure using AWS CDK in your AWS account
-Supported Regions
+Supported Regions.  **NOTE: The default installation is within two regions (us-east-1 for the frontend and us-east-2 for the backend).  Be sure you have boostrapped both regions**
 
 5. Located the file *.env.example* within the source directory and remove the *.example* extentions.  Open that .env file and replace each value then save your changes (see images below): **NOTE - For passwords make sure you use the following as guidance or installation will fail "Minimum Length 8 characters, Digits required, Upper and Lowercase required, and at least 1 symbol"**
 
