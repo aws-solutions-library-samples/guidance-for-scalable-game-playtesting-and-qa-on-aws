@@ -22,10 +22,16 @@ This guidance helps customers by providing a starter kit for their playtesting n
 ![](source/architecture/playtesting-solution-architecture.png)
 
 
+### Definitions
+
+- Playtester: A user who will be playtesting a game session via web frontend.  This user will be given an URL that will launch them into a web frontend in which they start the game session and play the game.  During playtesting, users are expected to record their observations via the test panel provided.
+- Playtest Session:  A game session that is created by a studio to be active during a given time frame.  These sessions can be partial game builds or full game builds that studios upload during the playtest session creation process.  a playtest session can have multiple playtesters that will connect to the game session all using Amazon GameLift Streams.
+- Observation: Created during the playtest session process.  Observations are questions posed by a studio/publisher that require playtester's to respond to during a playtest session.  For example, a studio may create a playtest session with these observations.  *What do you think about the combat style?* or *How does the layout feel with this current level design?*  Playtesters respond to each question during a playtesting session.
+
 
 ### Cost
 
-_You are responsible for the cost of the AWS services used while running this Guidance. As of July 2025, the cost for running this Guidance with the default settings in the US East (N. Virginia and Ohio for GameLift Streams) is approximately $11,954 per month for servicing (100 players playing 8 hours per day for a week straight)._
+_You are responsible for the cost of the AWS services used while running this Guidance. As of July 2025, the cost for running this Guidance with the default settings in the US East (N. Virginia and Ohio for GameLift Streams) is approximately $11,964 per month for servicing (100 players playing 8 hours per day for a week straight)._
 
 _We recommend creating an [AWS Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance._
 
@@ -41,6 +47,7 @@ The following table provides a sample cost breakdown for deploying this Guidance
 | Amazon DynamoDB | Table class (Standard), Average item size (all attributes) (1000 Byte), Data storage size (0.5 GB) | $ 1.63 |
 | AWS Step Functions | Workflow requests (100 per month), State transitions per workflow (11) | $ 0.00 |
 | AWS Web Application Firewall (WAF) | Number of Web Access Control Lists (Web ACLs) utilized (2 per month), Number of Rules added per Web ACL (5 per month) | $ 20.60 |
+| Amazon Bedrock | Claude 3 Haiku, 1 avg request per minute for 8 hours per day.  100 average input tokens with 500 average output tokens | $ 9.36 |
 | Amazon GameLift Streams | 100 players streaming 8 hours per day, for 7 days, using Windows Gen5 stream class at $2.13 per hour | $ 11,928.00 |
 
 ## Prerequisites
@@ -54,8 +61,7 @@ These deployment instructions work on both Windows and Mac-based operating syste
 - Use the [AWS Cloud Development Kit](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) (AWS CDK).  You can use aws configure via AWS CLI or other mechanisms to authenticate your terminal to use CDK
 - Make sure you have installed [AWS Command Line Interface](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-install.html) (AWS CLI)
 - Make sure you have your [AWS Profile](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-configure.html) set up to point to the correct account and the us-east-2 region
-- Perform [CDK Bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html) if you have not previously deployed infrastructure using AWS CDK in your AWS account
-Supported Regions
+
 
 
 ### Supported Regions
@@ -84,20 +90,19 @@ While the backend stack can technically be deployed to any region, it should be 
 
  ```npm run install-all```
 
-4. Open the .env file located in the source directory and replace each value then save your changes: **NOTE - For passwords make sure you use the following as guidance or installation will fail "Minimum Length 8 characters, Digits required, Upper and Lowercase required, and at least 1 symbol"**
+4. (skip if already have boostrapped account).  Perform [CDK Bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html) if you have not previously deployed infrastructure using AWS CDK in your AWS account
+Supported Regions
 
-   ```npm_config_user="ADMIN_USER"```
-   ```npm_config_password="ADMIN_PASS"```
-   ```npm_config_email="ADMIN_EMAIL"```
-   ```npm_config_PTuser="PLAYTESTING_USER"```
-   ```npm_config_PTpassword="PLAYTESTING_PASS"```
-   ```npm_config_PTemail="PLAYTESTING_EMAIL"```
+5. Located the file *.env.example* within the source directory and remove the *.example* extentions.  Open that .env file and replace each value then save your changes (see images below): **NOTE - For passwords make sure you use the following as guidance or installation will fail "Minimum Length 8 characters, Digits required, Upper and Lowercase required, and at least 1 symbol"**
 
-5. Run the following command to deploy the entire solution (except the Discord Bot):
+![](assets/RemoveEnvExample.png)
+![](assets/EnvReplace.png)
+
+6. Run the following command to deploy the entire solution (except the Discord Bot):
 
  ```npm run deploy-all``` 
 
-5. Use the URL in the output options when deployment is complete to access the admin portal. You will also need this URL for the Discord bot, along with an ApiKey from AWS API Gateway. Install time should take 15-20 minutes.
+7. Use the URL in the output options when deployment is complete to access the admin portal. You will also need this URL for the Discord bot, along with an ApiKey from AWS API Gateway. Install time should take 15-20 minutes.
 
 ### Deploying Discord Bot
 
@@ -128,7 +133,7 @@ While the backend stack can technically be deployed to any region, it should be 
 
 ## Running the Guidance
 
-In this guidance, we will walk through the basic functions of the admin page as well as the playtesting page that playtesters will see. NOTE: We won't be setting up a playtest session in this guidance, as this solution does not ship with a testable game. 
+In this guidance, we will walk through the functions of the admin page as well as the playtesting page that playtesters will see. **NOTE: This solution does not ship with a testable game.**
 
 ### Login admin and playtesters
 
