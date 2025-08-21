@@ -1,3 +1,4 @@
+
 # Project Setup Guide for the Discord Bot
 
 This guide walks you through setting up and configuring the Discord bot.
@@ -102,11 +103,42 @@ npm install discord.js
 ---
 
 ## 8. Run the bot
-Now that we've configured the bot, run it by first deploying the commands:
+Now that we've configured the bot, register the commands to Discord by running the deploy-commands file:
 ```sh
    node deploy-commands.js
    ```
 And finally run the bot:
+```sh
+   node index.js
+   ```
+
+## How to register and connect players to the stream
+With the bot deployed and running, you can now have users interact with it using slash commands within the server the bot is deployed in.
+
+For example, if wanting to register for an existing playtesting session, users will input the following command:
+```sh
+   /register
+   ```
+ 
+ The bot will then confirm if the user would like to be added to the playtesting event.
+
+If confirmed, the bot will then call the API backend using the player's global Discord username as an indentifier, register for the event, and if successful, returns the user the required login credentials as well as their uniquely created hashed URL link to connect to the playtesting stream.
+
+
+![Registered User Screenshot](/../ModifyingBotReadme/source/bot/discordBot_registered_ss_clean.png?raw=true "Registered User Screenshot")
+
+
+#### Note, the bot will send the response to the user through usage of ephemeral messaging only available to registered Discord bots to reduce phishing risk, as well as to avoid cluttering the server itself. This can also be disabled within the register command's code if preferred.
+
+## Adding new commands to the bot
+As your bot's needs evolve, you can add additional commands by creating additional Javascript files for each new command as displayed within the commands/utility folder. Example commands can be found in the folder, as well as documentation for the Discord.js library found [here.](https://discord.js.org/docs/packages/discord.js/14.21.0) 
+
+Once created and added to the utility folder, register the new command to Discord by running the deploy-commands file:
+```sh
+   node deploy-commands.js
+   ```
+
+And restart the bot: 
 ```sh
    node index.js
    ```
