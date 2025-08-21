@@ -102,7 +102,7 @@ Supported Regions.  **NOTE: The default installation is within two regions (us-e
 
  ```npm run deploy-all``` 
 
-7. Use the URL in the output options when deployment is complete to access the admin portal. You will also need this URL for the Discord bot, along with an ApiKey from AWS API Gateway. Install time should take 15-20 minutes.
+7. When deployment is complete, to access the admin portal use the URL in the PlaytestingFrontendStack Outputs tab within CloudFormation on the AWS Console.  Optionally, you should see the URL located in the terminal window after deployment (should see *Outputs: PlaytestingFrontendStack.CloudFrontDomain = <YOUR_CLOUDFRONT_URL>*). Install time should take 15-20 minutes.
 
 ### Deploying Discord Bot
 
