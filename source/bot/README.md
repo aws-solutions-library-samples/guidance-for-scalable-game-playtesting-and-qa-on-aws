@@ -72,14 +72,23 @@ npm install discord.js
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
 2. Click "New Application"
 3. Name your application and click Create
-4. From the left-hand menu, go to "Bot"
-5. Click "Add Bot" and confirm when prompted
-6. Enable these Privileged Gateway Intents:
-   - MESSAGE CONTENT INTENT (if your bot reads message content)
-   - SERVER MEMBERS INTENT (if your bot interacts with member data)
-   - PRESENCE INTENT (if your bot tracks member presence)
+4. Select "bot" in the third column
+5. Select "applications.commands" in the second column
+6. Enable these Bot Permissions
+   - View Channels
+   - Send Messages
+   - Send Messages in Threads
+   - Manage Messages
+   - Read Message History
+   - Use Slash Commands
+7. Make sure the Integration Type is set to Guild Install
+8. Copy the generated URL and paste it into your browser
+9. Select the server you would like to add your bot to
+10. Click Continue
+11. Confirm the permission set for this server's version of the bot
+12. Click Authorize
 
-#### Note: If you plan to publish or verify your bot, only enable intents that are truly necessary.
+#### Note: If you plan to publish or verify your bot, only enable permissions that are truly necessary.
 
 ---
 
