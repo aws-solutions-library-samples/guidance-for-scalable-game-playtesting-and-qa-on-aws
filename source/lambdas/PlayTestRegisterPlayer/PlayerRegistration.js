@@ -20,9 +20,9 @@ const generateTempPassword = () => {
     const numbers = '0123456789';
     const symbols = '!@#$%^&*';
     
-    // Function to get random character from a string
+    // Function to get random character from a string using crypto
     const getRandomChar = (characterSet) => {
-        return characterSet[Math.floor(Math.random() * characterSet.length)];
+        return characterSet[crypto.randomInt(0, characterSet.length)];
     };
 
     // Ensure at least one of each required character type
@@ -39,14 +39,15 @@ const generateTempPassword = () => {
         password.push(getRandomChar(allChars));
     }
 
-    // Shuffle the password array to make it random
+    // Shuffle the password array using crypto.randomInt
     for (let i = password.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = crypto.randomInt(0, i + 1);
         [password[i], password[j]] = [password[j], password[i]];
     }
 
     return password.join('');
 };
+
 
 const generateHash = (stringValue, salt) => {
     const hash = crypto

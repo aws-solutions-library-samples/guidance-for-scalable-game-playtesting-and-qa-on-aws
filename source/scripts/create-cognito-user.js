@@ -2,6 +2,7 @@ const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminAddUserToGro
 const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
 const fs = require("fs");
 const path = require("path");
+const crypto = require('crypto');
 require('dotenv').config();
 
 // Function to generate a random temporary password
@@ -12,7 +13,7 @@ const generateTempPassword = () => {
     const symbols = '!@#$%^&*';
     
     const getRandomChar = (characterSet) => {
-        return characterSet[Math.floor(Math.random() * characterSet.length)];
+        return characterSet[crypto.randomInt(0, characterSet.length)];
     };
 
     let password = [
@@ -27,8 +28,9 @@ const generateTempPassword = () => {
         password.push(getRandomChar(allChars));
     }
 
+    // Cryptographically secure shuffle
     for (let i = password.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = crypto.randomInt(0, i + 1);
         [password[i], password[j]] = [password[j], password[i]];
     }
 
@@ -165,14 +167,30 @@ async function createUser() {
         }));
         console.log(`User '${username}' added to group '${groupName}' successfully.`);
 
-        // Log the temporary password
-        console.log('\n=== IMPORTANT USER CREDENTIALS ===');
-        console.log(`Username: ${username}`);
-        console.log(`Temporary password: ${tempPassword}`);
-        console.log('\nNOTE: User must change password on first login and verify their email address.');
+        // Create a secure credentials file
+        const credentialsPath = path.join(__dirname, '../.user-credentials');
+        const credentialsContent = `
+=== IMPORTANT USER CREDENTIALS ===
+Username: ${username}
+Temporary password: ${tempPassword}
+Created: ${new Date().toISOString()}
+
+SECURITY NOTICE:
+- This file contains sensitive information
+- Delete this file immediately after use
+- Do not share or commit this file
+============================
+`;
+        
+        // Write with restricted permissions (only owner can read/write)
+        fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
+
+        console.log('\n=== CREDENTIALS NOTICE ===');
+        console.log('User credentials have been saved to .user-credentials file');
+        console.log('IMPORTANT: Delete this file immediately after use');
         console.log('===============================');
 
-        // Create a marker file to indicate successful completion
+        // Create success marker file
         fs.writeFileSync(
             path.join(__dirname, '../.deployment-success'),
             'Cognito user creation successful'
@@ -187,6 +205,7 @@ async function createUser() {
         process.exit(1);
     }
 }
+
 
 // Execute the user creation with proper error handling
 (async () => {
