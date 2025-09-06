@@ -56,26 +56,14 @@ export const handler = async (event) => {
                 body = { message: `Playtest session '${deletePlaytestID}' deleted successfully.` };
                 break;
             case 'GET':
-
-                // Get today's date in ISO format (adjust format as per your data)
-                const today = new Date().toISOString().split("T")[0]; // 'YYYY-MM-DD'
-
                 // Define the scan parameters
                 const params = {
-                    TableName: process.env.PLAYTESTSESSION_TABLE,
-                    FilterExpression: "#endDate >= :today AND #enabled = :enabled",
-                    ExpressionAttributeNames: {
-                        "#endDate": "endDate",     // Name of the endDate attribute
-                        "#enabled": "enabled",     // Name of the enabled flag
-                    },
-                    ExpressionAttributeValues: {
-                        ":today": today,        // Today's date for comparison
-                        ":enabled": true,       // Only fetch items where enabled is true
-                    },
+                    TableName: process.env.PLAYTESTSESSION_TABLE
                 };
 
                 body = await dynamo.scan(params);
                 break;
+
             case 'POST': // Used for updates
                 const requestBody = JSON.parse(event.body);
                 console.log("Received request body:", requestBody);

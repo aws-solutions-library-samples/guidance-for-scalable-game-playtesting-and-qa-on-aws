@@ -5,18 +5,17 @@
  */
 
 import React from "react";
-import { AppLayout, SideNavigation, Button, ContentLayout, Header, SpaceBetween, HelpPanel, SplitPanel} from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, Button, ContentLayout, Header, SpaceBetween, HelpPanel} from "@cloudscape-design/components";
 import { WithAuthenticatorProps } from "@aws-amplify/ui-react/dist/types/components/Authenticator/withAuthenticator";
-
-//Matt Added Below
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Home from "./Home";
 import PlaySessions from "./PlaySessions";
 import AISummaryChat from "./AISummaryChat";
 import AddNewPlayTest from "./AddNewPlayTest"
 
 interface ApplicationProps {
-    signOut: any
+    signOut: any;
+    showAISummary?: boolean;
 }
 
 interface ApplicationState {
@@ -44,9 +43,9 @@ class Application extends React.Component<ApplicationProps & WithAuthenticatorPr
     };
 
     render() {
-
         return (
-            <AppLayout navigationHide={false}
+            <AppLayout 
+                navigationHide={false}
                 navigation={
                     <SideNavigation
                         header={{
@@ -64,26 +63,36 @@ class Application extends React.Component<ApplicationProps & WithAuthenticatorPr
                         }}
                     />
                 }
-                toolsHide={false}
+                toolsHide={!this.props.showAISummary}
                 toolsWidth={500}
-                tools={<HelpPanel header={<h2>Observation Summarization</h2>}><AISummaryChat observations={this.state.filteredObservations} selectedSession={this.state.selectedSessionID} /></HelpPanel>}
-                headerVariant="high-contrast" content={
-                <ContentLayout
+                tools={
+                    this.props.showAISummary ? (
+                        <HelpPanel header={<h2>Observation Summarization</h2>}>
+                            <AISummaryChat 
+                                observations={this.state.filteredObservations} 
+                                selectedSession={this.state.selectedSessionID} 
+                            />
+                        </HelpPanel>
+                    ) : null
+                }
+                headerVariant="high-contrast" 
+                content={
+                    <ContentLayout
                         headerVariant="high-contrast"
-                    header={
-                        <SpaceBetween size="xl">
-                            <Header
-                                variant="h1"
-                                description="Welcome to the Playtesting Service Demo."
-                                actions={
-                                    <SpaceBetween direction="horizontal" size="xs">
-                                        <Button variant="primary" onClick={this.props.signOut}>Sign Out</Button>
-                                    </SpaceBetween>
-                                }>
-                                Playtesting Demo
-                            </Header>
-                        </SpaceBetween>
-                    }>
+                        header={
+                            <SpaceBetween size="xl">
+                                <Header
+                                    variant="h1"
+                                    description="Welcome to the Playtesting Service Demo."
+                                    actions={
+                                        <SpaceBetween direction="horizontal" size="xs">
+                                            <Button variant="primary" onClick={this.props.signOut}>Sign Out</Button>
+                                        </SpaceBetween>
+                                    }>
+                                    Playtesting Demo
+                                </Header>
+                            </SpaceBetween>
+                        }>
                         <br />
                         <br />
 
@@ -93,15 +102,20 @@ class Application extends React.Component<ApplicationProps & WithAuthenticatorPr
                                 <Route path="/dashboard" element={<Home setSelectedSessionID={this.setSelectedSessionID} setFilteredObservations={this.setFilteredObservations} />} />
                                 <Route path="/psessions" element={<PlaySessions />} />
                                 <Route path="/addplaytest" element={<AddNewPlayTest />} />
-
                             </Routes>
-                    </SpaceBetween>
-                </ContentLayout>
-            }
-                
+                        </SpaceBetween>
+                    </ContentLayout>
+                }
             />
         )
     }
 }
 
-export default Application;
+// Wrapper component to provide location context
+const ApplicationWrapper: React.FC<ApplicationProps & WithAuthenticatorProps> = (props) => {
+    const location = useLocation();
+    const showAISummary = location.pathname === '/' || location.pathname === '/dashboard';
+    return <Application {...props} showAISummary={showAISummary} />;
+};
+
+export default ApplicationWrapper;

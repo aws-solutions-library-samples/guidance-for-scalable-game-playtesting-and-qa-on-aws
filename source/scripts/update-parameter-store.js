@@ -9,15 +9,6 @@ const ssmClient = new SSMClient({ region: process.env.CDK_DEFAULT_REGION });
 async function updateParameterStore() {
     try {
 
-        //get playtest username and password arguments
-        const playtestUsername = process.env.npm_config_PTuser;
-        const playtestPassword = process.env.npm_config_PTpassword;
-
-        if (!playtestUsername || !playtestPassword ) {
-            console.error("Error: Missing arguments. Run with --PTuser=USERNAME --PTpassword=PASSWORD");
-            process.exit(1);
-        }
-
         // Path to cdk-outputs.json (relative to the CDK execution)
         const outputsPath = path.join(__dirname, "../cdk-outputs.json");
 
@@ -52,28 +43,6 @@ async function updateParameterStore() {
         await ssmClient.send(command);
         console.log(`Successfully updated ${parameterName} in AWS Parameter Store.`);
 
-        //Now I need to update more parameter store values
-
-        //username
-        command = new PutParameterCommand({
-            Name: "playtestUsername",
-            Value: playtestUsername,
-            Type: "String",
-            Overwrite: true,
-        });
-
-        await ssmClient.send(command);
-
-        //password
-        command = new PutParameterCommand({
-            Name: "playtestPassword",
-            Value: playtestPassword,
-            Type: "String",
-            Overwrite: true,
-        });
-
-        await ssmClient.send(command);
-        console.log(`Successfully updated playtester username and password in AWS Parameter Store.`);
     } catch (error) {
         console.error("Error updating Parameter Store:", error);
         process.exit(1);

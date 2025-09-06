@@ -1,19 +1,15 @@
 import React from "react";
-import ContentLayout from "@cloudscape-design/components/content-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Link from "@cloudscape-design/components/link";
 import Alert from "@cloudscape-design/components/alert";
-
-import { ApiError, get } from 'aws-amplify/api';
+import { get } from 'aws-amplify/api';
 import Table from "@cloudscape-design/components/table";
-import { Routes, Route } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
 import Spinner from "@cloudscape-design/components/spinner";
 import { StatusIndicator } from "@cloudscape-design/components";
 import { Button } from "@cloudscape-design/components";
-import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 
 interface HomeProps {
     setSelectedSessionID: (id: string | null) => void;
