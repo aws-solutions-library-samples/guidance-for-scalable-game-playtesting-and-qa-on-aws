@@ -516,6 +516,100 @@ export class PlaytestingApiStack extends cdk.Stack {
             authorizationType: apigateway.AuthorizationType.COGNITO
         });
 
+         ///
+        // adding GetPlaytestersTestSessions Endpoint:  Requires ApiKey
+        ///
+
+        const getPlaytestersTestSessions = api.root.addResource("GetPlaytestersTestSessions")
+
+        // Get playtest sessions used for registration
+        const getPlaytestersTestSessionsLambda = new lambda.Function(this, 'GetPlaytestersTestSessions', {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            handler: 'PlayTestGetPlaytestersTestSessions.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestGetPlaytestersTestSessions'),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            environment: {
+                "PLAYTESTERS_TABLE": playtestertable.tableName,
+                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName
+            },
+            logGroup: lambdaLogGroup
+        });
+        // grant read rights to metadata table
+        playtestsessiontable.grantReadData(getPlaytestersTestSessionsLambda)
+        playtestertable.grantReadData(getPlaytestersTestSessionsLambda)
+
+        //I need to add more permissions to the policy for dynamodb:PutItem action
+        getPlaytestersTestSessionsLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["dynamodb:GetItem"],
+            resources: [playtestsessiontable.tableArn]
+        }))
+
+        //I need to add a get method called /GetPlaytestersTestSessions that uses a apikey but no authorization
+        getPlaytestersTestSessions.addMethod('POST', new apigateway.LambdaIntegration(getPlaytestersTestSessionsLambda), {
+            apiKeyRequired: true
+        });
+
+
+        ///
+        // adding GetPlayTestSessions Endpoint:  Requires ApiKey
+        ///
+
+        const getPlayTestSessions = api.root.addResource("GetPlayTestSessions")
+
+        // Get playtest sessions used for registration
+        const getPlayTestSessionsLambda = new lambda.Function(this, 'GetPlayTestSessions', {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            handler: 'PlayTestGetPlayTestSessions.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestGetPlayTestSessions'),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            environment: {
+                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName
+            },
+            logGroup: lambdaLogGroup
+        });
+        // grant read rights to metadata table
+        playtestsessiontable.grantReadData(getPlayTestSessionsLambda)
+
+        //I need to add more permissions to the policy for dynamodb:PutItem action
+        getPlayTestSessionsLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["dynamodb:GetItem"],
+            resources: [playtestsessiontable.tableArn]
+        }))
+
+        //I need to add a get method called /GetPlayTestSessions that uses a apikey but no authorization
+        getPlayTestSessions.addMethod('GET', new apigateway.LambdaIntegration(getPlayTestSessionsLambda), {
+            apiKeyRequired: true
+        });
+
+        ////
+        //adding getplaytesterURL ednpoint below
+        ////
+
+        const playtesterURL = api.root.addResource("GetPlaytesterURL")
+
+        // lambda for getting URL
+        const getPlaytesterURLLambda = new lambda.Function(this, 'PlayTestGetPlayTestURL', {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            handler: 'PlayTestGetPlayTestURL.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestGetPlayTestURL'),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            logGroup: lambdaLogGroup
+        });
+
+        //add more permissions to the policy
+        getPlaytesterURLLambda.addToRolePolicy(new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+            actions: ["ssm:GetParameter"],
+                resources: [`arn:aws:ssm:*:${this.account}:*`]
+        }))
+
+        //I need to add a post method called /GetPlaytesterURL that uses a apikey but no authorization
+        playtesterURL.addMethod('POST', new apigateway.LambdaIntegration(getPlaytesterURLLambda), {
+            apiKeyRequired: true
+        });
+
 
 
         ////
@@ -531,12 +625,23 @@ export class PlaytestingApiStack extends cdk.Stack {
             code: lambda.Code.fromAsset('lambdas/PlayTestRegisterPlayer'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
-                "PLAYTESTERS_TABLE": playtestertable.tableName
+                "PLAYTESTERS_TABLE": playtestertable.tableName,
+                "COGNITO_USER_POOL_ID": userPool.userPoolId  
             },
             logGroup: lambdaLogGroup
         });
         // grant read rights to metadata table
         playtestertable.grantReadData(registerPlayer)
+
+        //Need to add the ability to register new cognito users
+        registerPlayer.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                "cognito-idp:AdminCreateUser",
+                "cognito-idp:AdminSetUserPassword"
+            ],
+            resources: [userPool.userPoolArn]  // Use the specific ARN of your user pool
+        }));
 
         //add more permissions to the policy
         registerPlayer.addToRolePolicy(new iam.PolicyStatement({
@@ -694,18 +799,20 @@ export class PlaytestingApiStack extends cdk.Stack {
             code: lambda.Code.fromAsset('lambdas/PlayTesterValidation'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
+                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName,
                 "PLAYTESTERS_TABLE": playtestertable.tableName
             },
             logGroup: lambdaLogGroup
         });
         // grant read rights to metadata table
         playtestertable.grantReadData(validatePlayer)
+        playtestsessiontable.grantReadData(validatePlayer)
 
         //I need to add more permissions to the policy for dynamodb:GetItem action
         validatePlayer.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ["dynamodb:GetItem"],
-            resources: [playtestertable.tableArn]
+            resources: [playtestertable.tableArn, playtestsessiontable.tableArn]
         }))
 
         //I need to add a post method called /validate that uses a apikey but no authorization
@@ -798,12 +905,14 @@ export class PlaytestingApiStack extends cdk.Stack {
             code: lambda.Code.fromAsset('lambdas/PlayTestObservations'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
             environment: {
-                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName
+                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName,
+                "PLAYTESTERS_TABLE": playtestertable.tableName
             },
             logGroup: lambdaLogGroup
         });
         // grant read rights to metadata table
         playtestsessiontable.grantReadData(playtestSessionObsLambda)
+        playtestertable.grantReadData(playtestSessionObsLambda)
 
         //I need to add more permissions to the policy for dynamodb:PutItem action
         playtestSessionObsLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -842,6 +951,34 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //I need to add a get method
         playtestListGLApplications.addMethod('GET', new apigateway.LambdaIntegration(PlayTestGLSListApplicationsLambda), {
+            authorizer: auth,
+            authorizationType: apigateway.AuthorizationType.COGNITO,
+        });
+
+        /////
+        ///Adding get for getting GL Streams group regions
+        /////
+
+        const playtestGetStreamGroupRegions = api.root.addResource("GetStreamGroupRegions")
+
+        //setting up lambda
+        const PlayTestGetStreamGroupRegionsLambda = new lambda.Function(this, 'PlayTestGetStreamGroupRegionsLambda', {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            handler: 'PlayTestGetStreamGroupRegions.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestGetStreamGroupRegions'),
+            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            logGroup: lambdaLogGroup
+        });
+
+        //I need to add more permissions to the policy for dynamodb:PutItem action
+        PlayTestGetStreamGroupRegionsLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["gameliftstreams:GetStreamGroup"],
+            resources: ["arn:aws:gameliftstreams:*"]
+        }))
+
+        //I need to add a get method
+        playtestGetStreamGroupRegions.addMethod('POST', new apigateway.LambdaIntegration(PlayTestGetStreamGroupRegionsLambda), {
             authorizer: auth,
             authorizationType: apigateway.AuthorizationType.COGNITO,
         });
@@ -932,8 +1069,35 @@ export class PlaytestingApiStack extends cdk.Stack {
         ], true);
 
 
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlaytesterURL/OPTIONS/Resource", [
+            {id: 'AwsSolutions-APIG4', reason: "CORS Options shouldn't have an authorizer per definition."},
+            {id: 'AwsSolutions-COG4', reason: "CORS Options shouldn't have an authorizer per definition."}
+        ])
 
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlaytesterURL/POST/Resource", [
+            { id: 'AwsSolutions-APIG4', reason: "The API method requires an API key but does not require authorization. This is expected for this use case." },
+            { id: 'AwsSolutions-COG4', reason: "The API method does not require Cognito user pool authorization for this use case." }
+        ]);
 
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlaytestersTestSessions/OPTIONS/Resource", [
+            {id: 'AwsSolutions-APIG4', reason: "CORS Options shouldn't have an authorizer per definition."},
+            {id: 'AwsSolutions-COG4', reason: "CORS Options shouldn't have an authorizer per definition."}
+        ])
+
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlaytestersTestSessions/POST/Resource", [
+            { id: 'AwsSolutions-APIG4', reason: "The API method requires an API key but does not require authorization. This is expected for this use case." },
+            { id: 'AwsSolutions-COG4', reason: "The API method does not require Cognito user pool authorization for this use case." }
+        ]);
+
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlayTestSessions/OPTIONS/Resource", [
+            {id: 'AwsSolutions-APIG4', reason: "CORS Options shouldn't have an authorizer per definition."},
+            {id: 'AwsSolutions-COG4', reason: "CORS Options shouldn't have an authorizer per definition."}
+        ])
+
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetPlayTestSessions/GET/Resource", [
+            { id: 'AwsSolutions-APIG4', reason: "The API method requires an API key but does not require authorization. This is expected for this use case." },
+            { id: 'AwsSolutions-COG4', reason: "The API method does not require Cognito user pool authorization for this use case." }
+        ]);
 
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/register/OPTIONS/Resource", [
             {id: 'AwsSolutions-APIG4', reason: "CORS Options shouldn't have an authorizer per definition."},
@@ -1035,6 +1199,16 @@ export class PlaytestingApiStack extends cdk.Stack {
             { id: 'AwsSolutions-COG4', reason: "CORS Options shouldn't have an authorizer per definition." }
         ])
 
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetStreamGroupRegions/POST/Resource", [
+            { id: 'AwsSolutions-APIG4', reason: "The API method requires an API key but does not require authorization. This is expected for this use case." },
+            { id: 'AwsSolutions-COG4', reason: "The API method does not require Cognito user pool authorization for this use case." }
+        ]);
+
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/playtesting-api/Default/GetStreamGroupRegions/OPTIONS/Resource", [
+            { id: 'AwsSolutions-APIG4', reason: "CORS Options shouldn't have an authorizer per definition." },
+            { id: 'AwsSolutions-COG4', reason: "CORS Options shouldn't have an authorizer per definition." }
+        ])
+
 
         // stage
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/prod/Resource", [
@@ -1053,6 +1227,10 @@ export class PlaytestingApiStack extends cdk.Stack {
             }
         ])
 
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/GetPlayTestSessions/ServiceRole/Resource", [
+            {id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.'},
+        ])
+
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlaytesterRegister/ServiceRole/Resource", [
             {id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.'},
         ])
@@ -1060,12 +1238,46 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlaytesterValidate/ServiceRole/Resource", [
             { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
         ])
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlaytesterValidate/ServiceRole/DefaultPolicy/Resource", [
+            {
+                id: "AwsSolutions-IAM5",
+                reason: "lambda has a hardened to account level least priviledge."
+            }
+        ])
 
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/Playtesters/ServiceRole/Resource", [
             { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
         ])
 
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlaytestGenerateSummary/ServiceRole/Resource", [
+            { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
+        ])
+
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/GetPlayTestSessions/ServiceRole/DefaultPolicy/Resource", [
+            {
+                id: "AwsSolutions-IAM5",
+                reason: "GetPlayTestSessionsLambda has a hardened to account level least priviledge."
+            }
+        ])
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/GetPlaytestersTestSessions/ServiceRole/Resource", [
+            {id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.'},
+        ])
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/GetPlaytestersTestSessions/ServiceRole/DefaultPolicy/Resource", [
+            {
+                id: "AwsSolutions-IAM5",
+                reason: "GetPlaytestersTestSessionsLambda has a hardened to account level least priviledge."
+            }
+        ])
+        
+
+        //need to create a nagsuppression for adding the new iam policy allowing wildcard resource access to ssm
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlayTestGetPlayTestURL/ServiceRole/DefaultPolicy/Resource", [
+            {
+                id: 'AwsSolutions-IAM5',
+                reason: 'This lambda has a wildcard permission to get parameters from ssm - this is intended behaviour and the permission is not destructive, additive or manipulating an AWS resource.'
+            }
+        ])
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlayTestGetPlayTestURL/ServiceRole/Resource", [
             { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
         ])
 
@@ -1142,7 +1354,15 @@ export class PlaytestingApiStack extends cdk.Stack {
         NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/gamelift-streams-get-stream-session-lambda/ServiceRole/Resource", [
             { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
         ])
-
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlayTestGetStreamGroupRegionsLambda/ServiceRole/Resource", [
+            { id: 'AwsSolutions-IAM4', reason: 'Using AWSLambdaBasicExecutionRole is fine.' },
+        ])
+        NagSuppressions.addResourceSuppressionsByPath(this, "/PlaytestingApiStack/PlayTestGetStreamGroupRegionsLambda/ServiceRole/DefaultPolicy/Resource", [
+            {
+                id: 'AwsSolutions-IAM5',
+                reason: 'This lambda has a wildcard permission to get parameters from ssm - this is intended behaviour and the permission is not destructive, additive or manipulating an AWS resource.'
+            }
+        ])
 
         return stage;
     }

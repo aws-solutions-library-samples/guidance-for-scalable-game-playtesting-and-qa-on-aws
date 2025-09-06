@@ -7,7 +7,7 @@
 
 import '@aws-amplify/ui-react/styles.css';
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
 import {Authenticator} from '@aws-amplify/ui-react';

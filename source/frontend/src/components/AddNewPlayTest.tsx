@@ -1,10 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import ContentLayout from "@cloudscape-design/components/content-layout";
 import Container from "@cloudscape-design/components/container";
-import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import Link from "@cloudscape-design/components/link";
 import Alert from "@cloudscape-design/components/alert";
 import Wizard from "@cloudscape-design/components/wizard";
 import Input from "@cloudscape-design/components/input";
@@ -18,10 +15,34 @@ import { post, get, put } from "aws-amplify/api";
 import S3ResourceSelector from "@cloudscape-design/components/s3-resource-selector";
 import { S3ResourceSelectorProps } from "@cloudscape-design/components/s3-resource-selector";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
-import { RadioGroup, Select, Table, TableProps } from "@cloudscape-design/components";
+import { RadioGroup, Select, Table, TableProps, Textarea } from "@cloudscape-design/components";
 import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
+
+const AWS_REGIONS: { [key: string]: string } = {
+    'us-east-1': 'US East (N. Virginia)',
+    'us-east-2': 'US East (Ohio)',
+    'us-west-1': 'US West (N. California)',
+    'us-west-2': 'US West (Oregon)',
+    'af-south-1': 'Africa (Cape Town)',
+    'ap-east-1': 'Asia Pacific (Hong Kong)',
+    'ap-south-1': 'Asia Pacific (Mumbai)',
+    'ap-northeast-1': 'Asia Pacific (Tokyo)',
+    'ap-northeast-2': 'Asia Pacific (Seoul)',
+    'ap-northeast-3': 'Asia Pacific (Osaka)',
+    'ap-southeast-1': 'Asia Pacific (Singapore)',
+    'ap-southeast-2': 'Asia Pacific (Sydney)',
+    'ca-central-1': 'Canada (Central)',
+    'eu-central-1': 'Europe (Frankfurt)',
+    'eu-west-1': 'Europe (Ireland)',
+    'eu-west-2': 'Europe (London)',
+    'eu-west-3': 'Europe (Paris)',
+    'eu-north-1': 'Europe (Stockholm)',
+    'eu-south-1': 'Europe (Milan)',
+    'me-south-1': 'Middle East (Bahrain)',
+    'sa-east-1': 'South America (São Paulo)'
+};
+
 
 type Bucket = S3ResourceSelectorProps.Bucket; // Alias to match Cloudscape's type
 
@@ -49,7 +70,7 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
             s3Buckets: [],
             startDate: "",
             endDate: "",
-            enabled: false,
+            enabled: true,
             observations: [""],
             selectedOption: "",
             runtimeEnvironment: { label: "", value: "" }, // Ensure it matches the expected format
@@ -57,7 +78,7 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
             sg_description: "",
             sg_class: "",
             capacityConfig: [
-                { location: 'us-west-1', alwaysOn: 1, onDemand: 1 },
+                { location: 'us-west-2', alwaysOn: 1, onDemand: 1 },
                 { location: 'us-east-1', alwaysOn: 1, onDemand: 1 },
                 { location: 'us-east-2', alwaysOn: 1, onDemand: 1 },
                 { location: 'ap-northeast-1', alwaysOn: 1, onDemand: 1 },
@@ -421,49 +442,57 @@ fetchBuckets = async (): Promise<Bucket[]> => {
         }
     };
 
-    getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
-        return [
-            {
-                id: 'location',
-                header: 'Location',
-                cell: item => item.location,
-            },
-            {
-                id: 'alwaysOn',
-                header: 'Always-On Capacity',
-                cell: item => (
-                    <Input
-                        type="number"
-                        value={item.alwaysOn.toString()}
-                        onChange={({ detail }) => {
-                            const updated = [...this.state.capacityConfig];
-                            const index = updated.findIndex(i => i.location === item.location);
-                            updated[index] = { ...updated[index], alwaysOn: parseInt(detail.value) || 0 };
-                            this.setState({ capacityConfig: updated });
-                        }}
-                        disabled={!this.state.selectedLocations.includes(item.location)}
-                    />
-                )
-            },
-            {
-                id: 'onDemand',
-                header: 'On-Demand Capacity',
-                cell: item => (
-                    <Input
-                        type="number"
-                        value={item.onDemand.toString()}
-                        onChange={({ detail }) => {
-                            const updated = [...this.state.capacityConfig];
-                            const index = updated.findIndex(i => i.location === item.location);
-                            updated[index] = { ...updated[index], onDemand: parseInt(detail.value) || 0 };
-                            this.setState({ capacityConfig: updated });
-                        }}
-                        disabled={!this.state.selectedLocations.includes(item.location)}
-                    />
-                )
-            }
-        ];
-    };
+getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
+    return [
+        {
+            id: 'location',
+            header: 'Location',
+            cell: item => (
+                <div>
+                    <div>{AWS_REGIONS[item.location] || item.location}</div>
+                    <Box color="text-body-secondary" fontSize="body-s">
+                        {item.location}
+                    </Box>
+                </div>
+            ),
+        },
+        {
+            id: 'alwaysOn',
+            header: 'Always-On Capacity',
+            cell: item => (
+                <Input
+                    type="number"
+                    value={item.alwaysOn.toString()}
+                    onChange={({ detail }) => {
+                        const updated = [...this.state.capacityConfig];
+                        const index = updated.findIndex(i => i.location === item.location);
+                        updated[index] = { ...updated[index], alwaysOn: parseInt(detail.value) || 0 };
+                        this.setState({ capacityConfig: updated });
+                    }}
+                    disabled={!this.state.selectedLocations.includes(item.location)}
+                />
+            )
+        },
+        {
+            id: 'onDemand',
+            header: 'On-Demand Capacity',
+            cell: item => (
+                <Input
+                    type="number"
+                    value={item.onDemand.toString()}
+                    onChange={({ detail }) => {
+                        const updated = [...this.state.capacityConfig];
+                        const index = updated.findIndex(i => i.location === item.location);
+                        updated[index] = { ...updated[index], onDemand: parseInt(detail.value) || 0 };
+                        this.setState({ capacityConfig: updated });
+                    }}
+                    disabled={!this.state.selectedLocations.includes(item.location)}
+                />
+            )
+        }
+    ];
+}
+
 
     render() {
         return (
@@ -701,11 +730,23 @@ fetchBuckets = async (): Promise<Bucket[]> => {
                                 content: (
                                     <SpaceBetween size="m">
                                         {this.state.observations.map((obs: string, index: number) => (
-                                            <div key={index} style={{ display: "flex", alignItems: "center" }} >
-                                                <FormField errorText={this.state.step5Validated && obs.trim() === "" ? "Observation is required" : ""} stretch>
-                                                    <Input value={obs} onChange={({ detail }) => this.handleObservationChange(index, detail.value)} />
+                                            <div key={index} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                                                <FormField 
+                                                    errorText={this.state.step5Validated && obs.trim() === "" ? "Observation is required" : ""} 
+                                                    stretch
+                                                >
+                                                    <Textarea
+                                                        value={obs}
+                                                        onChange={({ detail }) => this.handleObservationChange(index, detail.value)}
+                                                        rows={5}
+                                                        placeholder="Enter your observation here..."
+                                                    />
                                                 </FormField>
-                                                <Button onClick={() => this.removeObservation(index)} iconName="close" variant="icon" />
+                                                <Button 
+                                                    onClick={() => this.removeObservation(index)} 
+                                                    iconName="close" 
+                                                    variant="icon"
+                                                />
                                             </div>
                                         ))}
                                         <Button onClick={this.addObservation}>Add Observation</Button>

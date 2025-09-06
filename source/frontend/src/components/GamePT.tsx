@@ -59,7 +59,7 @@ class GamePT extends React.Component<GameProps, GameState> {
             error: "",
             micro: false,
             arn: "",
-            regions: ['us-east-2'],
+            regions: [props.region],
             inputEnabled: false
         };
         
@@ -73,6 +73,23 @@ class GamePT extends React.Component<GameProps, GameState> {
         this.onButtonDropdownItemClick = this.onButtonDropdownItemClick.bind(this);
     }
 
+    componentDidUpdate(prevProps: GameProps) {
+        // Check if region prop has changed
+        if (prevProps.region !== this.props.region) {
+            // Update the regions array with the new region
+            this.setState({
+                regions: [this.props.region]
+            });
+
+            // If stream is running, close it and restart with new region
+            if (this.state.status === StreamState.RUNNING) {
+                this.closeConnection();
+                // Optional: Automatically restart the stream with new region
+                // setTimeout(() => this.createStreamSession(), 500);
+            }
+        }
+    }
+
     private getVideoElement(): HTMLVideoElement {
         return document.getElementById(`StreamVideoElement${this.props.gameName}${this.props.sgId}`) as HTMLVideoElement;
     }
@@ -80,7 +97,6 @@ class GamePT extends React.Component<GameProps, GameState> {
     private getAudioElement(): HTMLAudioElement {
         return document.getElementById(`StreamAudioElement`) as HTMLAudioElement;
     }
-
 
     componentDidMount() {
         const element = this.getVideoElement();
@@ -124,11 +140,7 @@ class GamePT extends React.Component<GameProps, GameState> {
             })
             const {body} = await restOperation.response;
             const data = JSON.parse(await body.text());
-            //await this.gameliftstreams?.processSignalResponse(data.signalResponse)
-            //this.gameliftstreams?.attachInput()
             await this.waitForACTIVE(data.arn, this.props.sgId);
-
-            //this.setState({status: StreamState.RUNNING, arn: data.arn, region: data.region, inputEnabled: true});
         } catch (e) {
             console.log(e)
             if (e instanceof ApiError) {
@@ -143,7 +155,6 @@ class GamePT extends React.Component<GameProps, GameState> {
         }
     }
 
-    //New and needed for GL streams
     async waitForACTIVE(arn: string, sg: string, timeoutMs: number = 600000) {
         const startTime = Date.now();
         while (Date.now() - startTime < timeoutMs) { // while not timedout
@@ -167,7 +178,8 @@ class GamePT extends React.Component<GameProps, GameState> {
                     this.gameliftstreams?.attachInput();
                     this.setState((prevState) => ({
                         ...prevState,
-                        status: StreamState.RUNNING
+                        status: StreamState.RUNNING,
+                        arn: arn
                     }));
                     return; // session is started, state is set for it so we can return
                 }
@@ -184,7 +196,7 @@ class GamePT extends React.Component<GameProps, GameState> {
 
     private handleTimeout(arn: string) {
         const message = `Timeout in waiting for Stream Session: ${arn}`;
-        console.error(`Polling timed out`);
+        console.error(message);
     }
 
     private handleError(e: any) {
@@ -192,12 +204,10 @@ class GamePT extends React.Component<GameProps, GameState> {
         if (e instanceof ApiError) {
             if (e.response) {
                 const { statusCode, body } = e.response;
-                const data = JSON.parse(body ?? '');
                 console.error(`Received ${statusCode} error response with payload: ${body}`);
             }
         }
     }
-
 
     enableFullScreen() {
         const element = this.getVideoElement()
@@ -220,7 +230,7 @@ class GamePT extends React.Component<GameProps, GameState> {
     closeConnection() {
         this.setState({status: StreamState.STOPPED, micro: false, arn: "", inputEnabled: false});
         this.gameliftstreams?.close();
-        const element =  this.getVideoElement();
+        const element = this.getVideoElement();
         this.gameliftstreams = new gameliftstreamssdk.GameLiftStreams({
             videoElement: element,
             audioElement: this.getAudioElement(),
@@ -242,16 +252,6 @@ class GamePT extends React.Component<GameProps, GameState> {
             case "micro":
                 this.enableMic();
                 break;
-            //case "stats":
-                //this.gameliftstreams?.getRTCStats().then(r => {
-                //    for (const [key, value] of r.entries()) {
-                //        console.log(`\nStats for key: ${key}`);
-                //        for (const statName of Object.keys(value)) {
-                //            console.log(`${statName}: ${value[statName]}`);
-                //        }
-                //    }
-                //});
-                //break;
         }
     }
 

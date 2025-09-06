@@ -8,8 +8,6 @@ import React from "react";
 import Observation from "./Observation";
 import {Flashbar, Grid, GridProps, SpaceBetween, Button} from "@cloudscape-design/components";
 import {ApiError, post} from 'aws-amplify/api';
-
-import * as awsui from '@cloudscape-design/design-tokens';
 import { fetchAuthSession } from "aws-amplify/auth";
 
 interface ObservationItem {

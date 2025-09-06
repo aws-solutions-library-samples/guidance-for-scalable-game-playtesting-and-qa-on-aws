@@ -18,27 +18,32 @@
     "iall:PlayTestStepFunctionCreateStreamGroup-lambda": "cd lambdas/PlayTestStepFunctionCreateStreamGroup && npm install",
     "iall:PlayTestStepFunctionGetSreamGroup-lambda": "cd lambdas/PlayTestStepFunctionGetSreamGroup && npm install",
     "iall:frontend": "cd frontend && npm install",
-    "backend-test": "cdk deploy PlaytestingApiStack --require-approval never && node scripts/create-cognito-user.js",
-    "update-params": "node scripts/update-parameter-store.js",
+    "pre-deploy": "rimraf .deployment-failed .deployment-success",
+    "deploy-api": "cdk deploy PlaytestingApiStack --require-approval never",
+    "create-user": "node scripts/create-cognito-user.js",
     "build-frontend": "cd frontend && npm run build && cd ..",
-    "deploy-all": "cdk deploy PlaytestingApiStack --require-approval never && node scripts/create-cognito-user.js && node scripts/update-react-config.js && npm run build-frontend && cdk deploy PlaytestingFrontendStack --require-approval never && npm run update-params",
-    "destroy-all": "cdk destroy PlaytestingFrontendStack --require-approval never && cdk destroy PlaytestingApiStack --require-approval never"
+    "update-params": "node scripts/update-parameter-store.js",
+    "deploy-frontend": "node scripts/update-react-config.js && npm run build-frontend && cdk deploy PlaytestingFrontendStack --require-approval never",
+    "post-deploy": "npm run update-params",
+    "deploy-all": "npm run pre-deploy && npm run deploy-api && npm run create-user && node scripts/check-deployment.js && npm run deploy-frontend && npm run post-deploy"
   },
   "devDependencies": {
     "@types/node": "22.7.9",
     "aws-cdk": "^2.1004.0",
     "cdk-nag": "^2.29.14",
     "npm-run-all": "^4.1.5",
+    "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.6.3"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.777.0",
+    "@aws-sdk/client-cloudformation": "^3.879.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.879.0",
     "@aws-sdk/client-gameliftstreams": "^3.787.0",
     "@aws-sdk/client-ssm": "^3.775.0",
     "aws-cdk-lib": "^2.163.1",
     "constructs": "^10.4.2",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.2.2",
     "source-map-support": "^0.5.21",
     "xmlhttprequest-ssl": "^2.1.1"
   }

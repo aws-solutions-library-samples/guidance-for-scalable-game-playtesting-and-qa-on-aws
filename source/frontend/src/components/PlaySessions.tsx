@@ -1,11 +1,9 @@
 import React from "react";
-import ContentLayout from "@cloudscape-design/components/content-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import Link from "@cloudscape-design/components/link";
 import Alert from "@cloudscape-design/components/alert";
-import { ApiError, get, post, del as apiDelete } from 'aws-amplify/api';
+import { get, post, del as apiDelete } from 'aws-amplify/api';
 import Table from "@cloudscape-design/components/table";
 import Input from "@cloudscape-design/components/input";
 import DatePicker from "@cloudscape-design/components/date-picker";
@@ -16,6 +14,8 @@ import TimeInput from "@cloudscape-design/components/time-input";
 
 import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
+import Textarea from "@cloudscape-design/components/textarea";
+
 
 
 import { withRouter } from "./Utility/withRouter";
@@ -168,6 +168,7 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
             };
         });
     };
+
 
 
     // Add a New Observation
@@ -335,6 +336,7 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                                     <Input
                                         value={this.state.selectedSessionData.game}
                                         onChange={({ detail }) => this.handleInputChange("game", detail.value)}
+                                        disabled={true}
                                     />
                                 </FormField>
 
@@ -379,26 +381,43 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
 
                                 {/* Wrap Observations in a Separate Container */}
                                 <Container header={<Header variant="h3">Observations</Header>} className="observations-container">
-                                    {this.state.selectedSessionData.observations.map((obs, index) => (
-                                        <div key={index} style={{ display: "flex", alignItems: "center", marginBottom: "8px" }}>
-                                            <Input
-                                                value={obs.observation}
-                                                onChange={({ detail }) => this.handleObservationChange(index, "observation", detail.value)}
-                                            />
-                                            <Button onClick={() => this.removeObservation(index)} iconName="close" variant="icon" />
-                                        </div>
-                                    ))}
+                                    <SpaceBetween size="m">
+                                        {this.state.selectedSessionData.observations.map((obs, index) => (
+                                            <FormField
+                                                key={index}
+                                                stretch
+                                            >
+                                                <SpaceBetween direction="horizontal" size="xs">
+                                                    <div style={{ width: '100%' }}>
+                                                        <Textarea
+                                                            value={obs.observation}
+                                                            onChange={({ detail }) => this.handleObservationChange(index, "observation", detail.value)}
+                                                            rows={3}
+                                                        />
+                                                    </div>
+                                                    <Button 
+                                                        onClick={() => this.removeObservation(index)} 
+                                                        iconName="close" 
+                                                        variant="icon" 
+                                                    />
+                                                </SpaceBetween>
+                                            </FormField>
+                                        ))}
 
-                                    {/* Add New Observation */}
-                                    <FormField label="New Observation">
-                                        <Input
-                                            value={this.state.newObservation}
-                                            onChange={({ detail }) => this.setState({ newObservation: detail.value })}
-                                            placeholder="Enter new observation"
-                                        />
-                                        <Button onClick={this.addObservation} variant="primary">Add Observation</Button>
-                                    </FormField>
+                                        {/* Add New Observation */}
+                                        <FormField label="New Observation">
+                                            <Textarea
+                                                value={this.state.newObservation}
+                                                onChange={({ detail }) => this.setState({ newObservation: detail.value })}
+                                                placeholder="Enter new observation"
+                                                rows={3}
+                                            />
+                                            <Button onClick={this.addObservation} variant="primary">Add Observation</Button>
+                                        </FormField>
+                                    </SpaceBetween>
                                 </Container>
+
+
 
 
                                 {/* Update Button */}

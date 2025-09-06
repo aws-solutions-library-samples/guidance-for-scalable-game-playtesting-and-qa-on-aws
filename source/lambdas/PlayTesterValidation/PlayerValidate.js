@@ -3,21 +3,7 @@ import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 const dynamo = DynamoDBDocument.from(new DynamoDB());
 
-/**
- * Demonstrates a simple HTTP endpoint using API Gateway. You have full
- * access to the request and response payload, including headers and
- * status code.
- *
- * To scan a DynamoDB table, make a GET request with the TableName as a
- * query string parameter. To put, update, or delete an item, make a POST,
- * PUT, or DELETE request respectively, passing in the payload to the
- * DynamoDB API as a JSON body.
- */
 export const handler = async (event) => {
-    //console.log('Received event:', JSON.stringify(event, null, 2));
-
-    let body;
-    let statusCode = '200';
     const headers = {
         'Content-Type': 'application/json',
         "Access-Control-Allow-Origin": "*",
@@ -29,53 +15,113 @@ export const handler = async (event) => {
     try {
         switch (event.httpMethod) {
             case 'GET':
+                const id = event.queryStringParameters.id;
+                const sessionId = event.queryStringParameters.sessionId;
 
-                // Get the primary key (id) from the query string parameters
-                const id = event.queryStringParameters.id;  // Assuming the 'id' is passed as a query parameter
-                const sessionId = event.queryStringParameters.sessionId;  // Assuming the 'sessionId' is passed as a query parameter
-
-                const params = {
-                    TableName: process.env.PLAYTESTERS_TABLE,
+                // First, check if the playtest session is valid
+                const sessionParams = {
+                    TableName: process.env.PLAYTESTSESSION_TABLE,
                     Key: {
-                        playtesterID: id,           // Partition key
-                        playtestsessionID: sessionId // Sort key (if required)
-                    },
+                        playtestingID: sessionId
+                    }
                 };
 
-                body = await dynamo.get(params);
-
-                // If the item is not found
-                if (!body.Item) {
-                    return {
-                        statusCode: 404,
-                        headers,
-                        body: JSON.stringify({ IsValid: "false" }),
-                    };
-                }
-
-                //we have items then just return true
-                if (body.Item) {
+                const sessionResponse = await dynamo.get(sessionParams);
+                
+                // If session doesn't exist, return false
+                if (!sessionResponse.Item) {
                     return {
                         statusCode: 200,
                         headers,
-                        body: JSON.stringify({ IsValid: "true" }),
+                        body: JSON.stringify({ 
+                            IsValid: "false",
+                            reason: "Session not found"
+                        })
                     };
                 }
 
-                break;
+                const session = sessionResponse.Item;
+                const currentDate = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
+
+                // Check if session is enabled and within date range
+                if (!session.enabled) {
+                    return {
+                        statusCode: 200,
+                        headers,
+                        body: JSON.stringify({ 
+                            IsValid: "false",
+                            reason: "Session is disabled"
+                        })
+                    };
+                }
+
+                if (currentDate < session.startDate) {
+                    return {
+                        statusCode: 200,
+                        headers,
+                        body: JSON.stringify({ 
+                            IsValid: "false",
+                            reason: "Session has not started yet"
+                        })
+                    };
+                }
+
+                if (currentDate > session.endDate) {
+                    return {
+                        statusCode: 200,
+                        headers,
+                        body: JSON.stringify({ 
+                            IsValid: "false",
+                            reason: "Session has ended"
+                        })
+                    };
+                }
+
+                // If session is valid, check if playtester exists
+                const playtesterParams = {
+                    TableName: process.env.PLAYTESTERS_TABLE,
+                    Key: {
+                        playtesterID: id,
+                        playtestsessionID: sessionId
+                    },
+                };
+
+                const playtesterResponse = await dynamo.get(playtesterParams);
+
+                // Return appropriate response based on whether playtester exists
+                if (!playtesterResponse.Item) {
+                    return {
+                        statusCode: 200,
+                        headers,
+                        body: JSON.stringify({ 
+                            IsValid: "false",
+                            reason: "Playtester not found"
+                        }),
+                    };
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        IsValid: "true",
+                        reason: "All validations passed"
+                    }),
+                };
+
             default:
                 throw new Error(`Unsupported method "${event.httpMethod}"`);
         }
     } catch (err) {
-        statusCode = '400';
-        body = err.message;
-    } finally {
-        body = JSON.stringify(body);
+        console.error('Error:', err);
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ 
+                IsValid: "false",
+                reason: "Error processing request",
+                error: err.message 
+            })
+        };
     }
-
-    return {
-        statusCode,
-        body,
-        headers,
-    };
 };
