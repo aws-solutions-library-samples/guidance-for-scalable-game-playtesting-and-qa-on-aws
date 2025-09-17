@@ -159,11 +159,12 @@ module.exports = {
                                     }
 
                                     let replyContent;
-                                    if (registerData.username && registerData.password) {
-                                        replyContent = `You have successfully registered! Here is your [link.](${registerData.playtestURL})\n\nYour log-in is:\n\nusername: ${registerData.username}\npassword: ${registerData.password}\n\n${registerData.message}`;
+                                    if (registerData.username) {
+                                        replyContent = `You have successfully registered! Here is your [link.](${registerData.playtestURL})\n\nYour username is: ${registerData.username}\n\n${registerData.message}`;
                                     } else {
                                         replyContent = `${registerData.message}\n\nHere is your [link.](${registerData.playtestURL})`;
                                     }
+
 
                                     await modalSubmit.editReply({
                                         content: replyContent,

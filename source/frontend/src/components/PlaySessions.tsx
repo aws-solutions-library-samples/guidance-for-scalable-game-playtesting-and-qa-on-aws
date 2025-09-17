@@ -380,7 +380,7 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                                 </FormField>
 
                                 {/* Wrap Observations in a Separate Container */}
-                                <Container header={<Header variant="h3">Observations</Header>} className="observations-container">
+                                <Container header={<Header variant="h3">Questions to ask playtesters</Header>} className="observations-container">
                                     <SpaceBetween size="m">
                                         {this.state.selectedSessionData.observations.map((obs, index) => (
                                             <FormField
@@ -405,14 +405,14 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                                         ))}
 
                                         {/* Add New Observation */}
-                                        <FormField label="New Observation">
+                                        <FormField label="New Question">
                                             <Textarea
                                                 value={this.state.newObservation}
                                                 onChange={({ detail }) => this.setState({ newObservation: detail.value })}
-                                                placeholder="Enter new observation"
+                                                placeholder="Enter new question"
                                                 rows={3}
                                             />
-                                            <Button onClick={this.addObservation} variant="primary">Add Observation</Button>
+                                            <Button onClick={this.addObservation} variant="primary">Add Question</Button>
                                         </FormField>
                                     </SpaceBetween>
                                 </Container>
