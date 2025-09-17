@@ -726,20 +726,20 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                 ),
                             },
                             {
-                                title: "Observations",
+                                title: "Questions to ask playtesters",
                                 content: (
                                     <SpaceBetween size="m">
                                         {this.state.observations.map((obs: string, index: number) => (
                                             <div key={index} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
                                                 <FormField 
-                                                    errorText={this.state.step5Validated && obs.trim() === "" ? "Observation is required" : ""} 
+                                                    errorText={this.state.step5Validated && obs.trim() === "" ? "Question is required" : ""} 
                                                     stretch
                                                 >
                                                     <Textarea
                                                         value={obs}
                                                         onChange={({ detail }) => this.handleObservationChange(index, detail.value)}
                                                         rows={5}
-                                                        placeholder="Enter your observation here..."
+                                                        placeholder="Enter your question here..."
                                                     />
                                                 </FormField>
                                                 <Button 
@@ -749,7 +749,7 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                                 />
                                             </div>
                                         ))}
-                                        <Button onClick={this.addObservation}>Add Observation</Button>
+                                        <Button onClick={this.addObservation}>Add Question</Button>
                                     </SpaceBetween>
                                 ),
                             },
