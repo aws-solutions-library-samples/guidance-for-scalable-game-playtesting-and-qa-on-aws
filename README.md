@@ -112,7 +112,7 @@ Supported Regions.  **NOTE: The default installation is within two regions (us-e
 
 7. When deployment is complete, to access the admin portal use the URL in the PlaytestingFrontendStack Outputs tab within CloudFormation on the AWS Console.  Optionally, you should see the URL located in the terminal window after deployment (should see *Outputs: PlaytestingFrontendStack.CloudFrontDomain = <YOUR_CLOUDFRONT_URL>*). Install time should take 15-20 minutes.
 
-8. After installation is complete, you should see a *.user-credentials* within the source directory.  Within it is the admin temporary credentials.  Please delete this file for security purposes after using.
+8. After installation is complete, you will need to access your email in order to get your one-time password to login for the first time.
 
 ### Deploying Discord Bot
 
@@ -144,7 +144,7 @@ This is an optional step.  However, if you do not enable this section of the sol
 
 * Open the CloudFormation console (make sure you are viewing the region with your frontend stack, which should be us-east-1 by default) and click on the Outputs Tab of the PlaytestingFrontendStack.
 
-* Navigate to the CloudFrontDomain URL listed from step 7 above. Use your admin credentials that are within the *.user-credentials* file from step 8. If successful, you should see the home page.
+* Navigate to the CloudFrontDomain URL listed from step 7 above. Use your admin credentials that were sent to your email address. If successful, you should see the home page.
 
 
 
@@ -336,7 +336,7 @@ Refer [here](https://github.com/aws-solutions-library-samples/guidance-for-scala
 
 ## Next Steps
 
-This guidance demonstrates setting up a single playtest session with a single Discord bot. For multiple playtest sessions running simultaneously, you can deploy multiple versions of the Discord bot with different Session IDs. Additionally, while this guide demonstrates a simple playtest session setup using a single region, you may want to consider leveraging multiple regions. 
+This guidance demonstrates setting up a single playtest session and registering a playtester to that session.  You may want to test with a larger internal team with muliple session and within mulitple regions that your stream groups are deployed to.  Have playtesters experiment around with streaming from different regions.  Lastly, see what kind of sentiment gets generated after many playtesters report in their observations. 
 
 
 ## Cleanup
