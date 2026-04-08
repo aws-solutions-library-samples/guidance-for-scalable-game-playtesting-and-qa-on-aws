@@ -10,6 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@aws-sdk/client-gameliftstreams": "^3.787.0"
+    "@aws-sdk/client-gameliftstreams": "^3.1027.0"
   }
 }
