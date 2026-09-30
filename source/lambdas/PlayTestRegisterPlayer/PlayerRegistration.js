@@ -12,42 +12,6 @@ const ssmClient = new SSMClient();
 const dynamoDB = DynamoDBDocument.from(new DynamoDB());
 const cognitoClient = new CognitoIdentityProviderClient();
 
-// Function to generate a random temporary password
-const generateTempPassword = () => {
-    // Define character sets
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    const symbols = '!@#$%^&*';
-    
-    // Function to get random character from a string using crypto
-    const getRandomChar = (characterSet) => {
-        return characterSet[crypto.randomInt(0, characterSet.length)];
-    };
-
-    // Ensure at least one of each required character type
-    let password = [
-        getRandomChar(lowercase),  // at least one lowercase
-        getRandomChar(uppercase),  // at least one uppercase
-        getRandomChar(numbers),    // at least one number
-        getRandomChar(symbols),    // at least one symbol
-    ];
-
-    // Complete the rest of the password
-    const allChars = lowercase + uppercase + numbers + symbols;
-    for (let i = password.length; i < 12; i++) {
-        password.push(getRandomChar(allChars));
-    }
-
-    // Shuffle the password array using crypto.randomInt
-    for (let i = password.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(0, i + 1);
-        [password[i], password[j]] = [password[j], password[i]];
-    }
-
-    return password.join('');
-};
-
 
 const generateHash = (stringValue, salt) => {
     const hash = crypto
@@ -68,7 +32,6 @@ export const handler = async (event) => {
         const playtesterEmail = body.playtesterEmail;
 
         const hashedPlaytester = generateHash(playtesterId, playtestsessionId);
-        const tempPassword = generateTempPassword();
 
         let isNewCognitoUser = false;
         let userExists = true;
@@ -78,7 +41,6 @@ export const handler = async (event) => {
             const createUserParams = {
                 UserPoolId: process.env.COGNITO_USER_POOL_ID,
                 Username: playtesterId,
-                TemporaryPassword: tempPassword,
                 UserAttributes: [
                     {
                         Name: 'email',
@@ -86,25 +48,17 @@ export const handler = async (event) => {
                     },
                     {
                         Name: 'email_verified',
-                        Value: 'false'
+                        Value: 'true'  // Set to true since Cognito will verify through temp password
                     }
                 ],
-                MessageAction: 'SUPPRESS',
+                // Remove MessageAction: 'SUPPRESS' to allow email sending
                 DesiredDeliveryMediums: ['EMAIL']
             };
 
             await cognitoClient.send(new AdminCreateUserCommand(createUserParams));
             isNewCognitoUser = true;
 
-            // Set password requirements
-            const setPasswordParams = {
-                UserPoolId: process.env.COGNITO_USER_POOL_ID,
-                Username: playtesterId,
-                Password: tempPassword,
-                Permanent: false
-            };
-
-            await cognitoClient.send(new AdminSetUserPasswordCommand(setPasswordParams));
+            // Remove the AdminSetUserPasswordCommand section since Cognito will handle the temporary password
 
         } catch (cognitoError) {
             // If error is not "user exists", rethrow it
@@ -114,6 +68,7 @@ export const handler = async (event) => {
             // User already exists - continue with the flow
             userExists = true;
         }
+
 
         // Get URL from Parameter Store
         let command = new GetParameterCommand({
@@ -170,8 +125,7 @@ export const handler = async (event) => {
             responseBody = {
                 ...baseResponse,
                 username: playtesterId,
-                password: tempPassword,
-                message: "Please check your email to verify your account. You will need to change your password on first login."
+                message: "Please check your email for your temporary password. You will need to change your password on first login."
             };
         } else if (!isNewDynamoDBRecord) {
             // Both Cognito user and DynamoDB record exist
@@ -186,6 +140,7 @@ export const handler = async (event) => {
                 message: "You have been registered for this new playtest session. Please use your existing account credentials to access the playtest."
             };
         }
+
 
         return {
             statusCode: 200,

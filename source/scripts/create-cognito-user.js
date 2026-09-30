@@ -2,40 +2,7 @@ const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminAddUserToGro
 const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = require("@aws-sdk/client-cloudformation");
 const fs = require("fs");
 const path = require("path");
-const crypto = require('crypto');
 require('dotenv').config();
-
-// Function to generate a random temporary password
-const generateTempPassword = () => {
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    const symbols = '!@#$%^&*';
-    
-    const getRandomChar = (characterSet) => {
-        return characterSet[crypto.randomInt(0, characterSet.length)];
-    };
-
-    let password = [
-        getRandomChar(lowercase),  // at least one lowercase
-        getRandomChar(uppercase),  // at least one uppercase
-        getRandomChar(numbers),    // at least one number
-        getRandomChar(symbols),    // at least one symbol
-    ];
-
-    const allChars = lowercase + uppercase + numbers + symbols;
-    for (let i = password.length; i < 12; i++) {
-        password.push(getRandomChar(allChars));
-    }
-
-    // Cryptographically secure shuffle
-    for (let i = password.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(0, i + 1);
-        [password[i], password[j]] = [password[j], password[i]];
-    }
-
-    return password.join('');
-};
 
 // Initialize AWS clients
 const cognitoClient = new CognitoIdentityProviderClient({ region: process.env.CDK_DEFAULT_REGION });
@@ -143,18 +110,15 @@ async function createUser() {
 
         console.log(`Creating Cognito user: ${username}, ${email}`);
 
-        const tempPassword = generateTempPassword();
-
         // Create the user
         await cognitoClient.send(new AdminCreateUserCommand({
             UserPoolId: userPoolId,
             Username: username,
-            TemporaryPassword: tempPassword,
             UserAttributes: [
                 { Name: "email", Value: email },
-                { Name: "email_verified", Value: "false" }
+                { Name: "email_verified", Value: "true" }
             ],
-            MessageAction: "SUPPRESS"
+            DesiredDeliveryMediums: ['EMAIL']
         }));
         console.log(`User '${username}' created successfully.`);
 
@@ -167,27 +131,9 @@ async function createUser() {
         }));
         console.log(`User '${username}' added to group '${groupName}' successfully.`);
 
-        // Create a secure credentials file
-        const credentialsPath = path.join(__dirname, '../.user-credentials');
-        const credentialsContent = `
-=== IMPORTANT USER CREDENTIALS ===
-Username: ${username}
-Temporary password: ${tempPassword}
-Created: ${new Date().toISOString()}
-
-SECURITY NOTICE:
-- This file contains sensitive information
-- Delete this file immediately after use
-- Do not share or commit this file
-============================
-`;
-        
-        // Write with restricted permissions (only owner can read/write)
-        fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
-
-        console.log('\n=== CREDENTIALS NOTICE ===');
-        console.log('User credentials have been saved to .user-credentials file');
-        console.log('IMPORTANT: Delete this file immediately after use');
+        console.log('\n=== USER CREATION SUCCESS ===');
+        console.log('Your new user account has been created.');
+        console.log('Please check your email address for your temporary password.');
         console.log('===============================');
 
         // Create success marker file
@@ -205,7 +151,6 @@ SECURITY NOTICE:
         process.exit(1);
     }
 }
-
 
 // Execute the user creation with proper error handling
 (async () => {
