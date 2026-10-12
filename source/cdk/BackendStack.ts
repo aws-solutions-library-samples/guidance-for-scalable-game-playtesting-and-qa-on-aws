@@ -668,20 +668,40 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         const aiSummary = api.root.addResource("aisummary")
 
+        // Bedrock config for the summarization/sentiment feature.
+        // Claude 3 Haiku reached EOL on 2026-09-10; we use Claude Haiku 4.5, which is only
+        // available on-demand through a cross-region inference profile ("us." prefixed ID).
+        const bedrockRegion = "us-east-1";
+        const bedrockInferenceProfileId = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+        const bedrockFoundationModelId = "anthropic.claude-haiku-4-5-20251001-v1:0";
+        // The US cross-region inference profile can route to any of these regions, so the
+        // foundation-model invoke permission must cover all of them.
+        const bedrockProfileRegions = ["us-east-1", "us-east-2", "us-west-2"];
+
         // generate summary
         const generateAISummaryLambda = new lambda.Function(this, 'PlaytestGenerateSummary', {
             runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlaytestGenerateSummary.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGenerateSummary'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            environment: {
+                "BEDROCK_REGION": bedrockRegion,
+                "MODEL_ID": bedrockInferenceProfileId
+            },
             logGroup: lambdaLogGroup
         });
 
-        //I need to add more permissions to the policy for bedrock:InvokeModel
+        // Permission to invoke the model. Invoking through a cross-region inference profile
+        // requires InvokeModel on BOTH the inference profile ARN and the underlying
+        // foundation-model ARN in every region the profile can route to.
+        const bedrockModelResources = [
+            `arn:aws:bedrock:${bedrockRegion}:${this.account}:inference-profile/${bedrockInferenceProfileId}`,
+            ...bedrockProfileRegions.map(r => `arn:aws:bedrock:${r}::foundation-model/${bedrockFoundationModelId}`)
+        ];
         generateAISummaryLambda.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ["bedrock:InvokeModel"],
-            resources: ["*"]
+            resources: bedrockModelResources
         }))
 
         //I need to add a get method called /PlaytestGenerateSummary

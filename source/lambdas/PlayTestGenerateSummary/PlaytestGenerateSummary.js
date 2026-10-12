@@ -1,8 +1,8 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 
-//use process.env.CDK_DEFAULT_REGION instead of hardcoded value for dynamic reason
-//will also need to consider creating an inference profile in the event your region needs a crossreference for model
-const bedrockClient = new BedrockRuntimeClient({ region: "us-east-1" });
+//Bedrock region is configurable via env var. Defaults to us-east-1 where the Haiku 4.5
+//foundation model and its "us." cross-region inference profile are available.
+const bedrockClient = new BedrockRuntimeClient({ region: process.env.BEDROCK_REGION || "us-east-1" });
 
 export const handler = async (event) => {
 
@@ -43,14 +43,17 @@ export const handler = async (event) => {
         // Log observations to verify the correct data
         //console.log("Observations Parsed Successfully:", JSON.stringify(observations, null, 2));
 
-        //Format input for Claude 3 Haiku
+        //Format input for Claude Haiku 4.5
         const formattedInput = formatObservations(observations, userPrompt);
 
         //console.log("Formatted Input:", formattedInput);
 
-        //Invoke AWS Bedrock Claude 3 Haiku model
+        //Invoke AWS Bedrock Claude Haiku 4.5 model.
+        //NOTE: Claude 3 Haiku reached end-of-life on 2026-09-10. We now use Claude Haiku 4.5.
+        //Haiku 4.5 is only available on-demand via a cross-region inference profile (the "us." prefixed ID),
+        //not by its raw foundation-model ID. The MODEL_ID env var lets the region/profile be configured at deploy time.
         const command = new InvokeModelCommand({
-            modelId: "anthropic.claude-3-haiku-20240307-v1:0", //Correct model ID
+            modelId: process.env.MODEL_ID || "us.anthropic.claude-haiku-4-5-20251001-v1:0",
             contentType: "application/json",
             accept: "application/json",
             body: JSON.stringify({
@@ -59,8 +62,8 @@ export const handler = async (event) => {
                     { role: "user", content: formattedInput } //Only `user` role allowed
                 ],
                 max_tokens: 500,
-                temperature: 0.7,
-                top_p: 0.9
+                //NOTE: Haiku 4.5 rejects `temperature` and `top_p` together, so we only send `temperature`.
+                temperature: 0.7
             }),
         });
 
