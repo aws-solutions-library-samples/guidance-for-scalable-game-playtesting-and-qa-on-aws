@@ -8,7 +8,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
-    "install-all": "npm install && npm-run-all iall:*",
+    "install-all": "npm install && npm-run-all iall:* && npm run ensure-config",
     "iall:PlayTestAssociateApplication-lambda": "cd lambdas/PlayTestAssociateApplication && npm install",
     "iall:PlayTestGetGLAppStatus-lambda": "cd lambdas/PlayTestGetGLAppStatus && npm install",
     "iall:PlayTestGetStream-lambda": "cd lambdas/PlayTestGetStream && npm install",
@@ -18,14 +18,16 @@
     "iall:PlayTestStepFunctionCreateStreamGroup-lambda": "cd lambdas/PlayTestStepFunctionCreateStreamGroup && npm install",
     "iall:PlayTestStepFunctionGetSreamGroup-lambda": "cd lambdas/PlayTestStepFunctionGetSreamGroup && npm install",
     "iall:frontend": "cd frontend && npm install",
+    "ensure-config": "node scripts/ensure-react-config.js",
     "pre-deploy": "rimraf .deployment-failed .deployment-success",
     "deploy-api": "cdk deploy PlaytestingApiStack --require-approval never",
     "create-user": "node scripts/create-cognito-user.js",
-    "build-frontend": "cd frontend && npm run build && cd ..",
+    "build-frontend": "npm run ensure-config && cd frontend && npm run build && cd ..",
     "update-params": "node scripts/update-parameter-store.js",
     "deploy-frontend": "node scripts/update-react-config.js && npm run build-frontend && cdk deploy PlaytestingFrontendStack --require-approval never",
     "post-deploy": "npm run update-params",
-    "deploy-all": "npm run pre-deploy && npm run deploy-api && npm run create-user && node scripts/check-deployment.js && npm run deploy-frontend && npm run post-deploy"
+    "deploy-all": "npm run pre-deploy && npm run deploy-api && npm run create-user && node scripts/check-deployment.js && npm run deploy-frontend && npm run post-deploy",
+    "destroy-all": "cdk destroy --all --force"
   },
   "devDependencies": {
     "@types/node": "22.7.9",
