@@ -9,23 +9,11 @@ import "@cloudscape-design/global-styles/index.css"
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Amplify } from 'aws-amplify';
 
+// Amplify config is sourced from aws-config.generated.json (regenerated each deploy).
+// index.tsx is never mutated by the deploy process, keeping destroy/redeploy idempotent.
+import awsConfig from './aws-config';
 
-Amplify.configure({
-    Auth: {
-        Cognito: {
-            userPoolId: "USERPOOL_PLACEHOLDER",
-            userPoolClientId: "CLIENTID_PLACEHOLDER"
-        }
-    },
-    API: {
-        REST: {
-            "playtesting-api": {
-                endpoint: "API_ENDPOINT_PLACEHOLDER",
-
-            }
-        }
-    }
-})
+Amplify.configure(awsConfig)
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
