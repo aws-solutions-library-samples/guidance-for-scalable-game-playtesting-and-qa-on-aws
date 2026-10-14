@@ -17,6 +17,7 @@
     "iall:PlayTestStartStream-lambda": "cd lambdas/PlayTestStartStream && npm install",
     "iall:PlayTestStepFunctionCreateStreamGroup-lambda": "cd lambdas/PlayTestStepFunctionCreateStreamGroup && npm install",
     "iall:PlayTestStepFunctionGetSreamGroup-lambda": "cd lambdas/PlayTestStepFunctionGetSreamGroup && npm install",
+    "iall:PlayTestAuthorizer-lambda": "cd lambdas/PlayTestAuthorizer && npm install",
     "iall:frontend": "cd frontend && npm install",
     "ensure-config": "node scripts/ensure-react-config.js",
     "pre-deploy": "rimraf .deployment-failed .deployment-success",

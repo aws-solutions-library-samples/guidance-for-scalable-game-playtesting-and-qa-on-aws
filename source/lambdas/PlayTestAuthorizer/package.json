@@ -1,0 +1,15 @@
+{
+  "type": "module",
+  "name": "PlayTestAuthorizerLambda",
+  "version": "1.0.0",
+  "description": "API Gateway REQUEST Lambda authorizer enforcing Cognito group-based access.",
+  "main": "PlayTestAuthorizer.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-jwt-verify": "^4.0.1"
+  }
+}
