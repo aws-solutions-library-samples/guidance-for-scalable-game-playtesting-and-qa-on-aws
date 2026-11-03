@@ -55,7 +55,7 @@ The following table provides a sample cost breakdown for deploying this Guidance
 | Amazon DynamoDB | Table class (Standard), Average item size (all attributes) (1000 Byte), Data storage size (0.5 GB) | $ 1.63 |
 | AWS Step Functions | Workflow requests (100 per month), State transitions per workflow (11) | $ 0.00 |
 | AWS Web Application Firewall (WAF) | Number of Web Access Control Lists (Web ACLs) utilized (2 per month), Number of Rules added per Web ACL (5 per month) | $ 20.60 |
-| Amazon Bedrock | Claude 3 Haiku, 1 avg request per minute for 8 hours per day.  100 average input tokens with 500 average output tokens | $ 9.36 |
+| Amazon Bedrock | Claude Haiku 4.5, 1 avg request per minute for 8 hours per day.  100 average input tokens with 500 average output tokens | $ 9.36 |
 | Amazon GameLift Streams | 100 players streaming 8 hours per day, for 7 days, using Windows Gen5 stream class at $2.13 per hour | $ 11,928.00 |
 
 ## Prerequisites
@@ -134,7 +134,9 @@ This is an optional step.  However, if you do not enable this section of the sol
 
 ![](assets/Bedrock3.png)
 
-5. Now scroll down until you see the Anthropic section and select Claude 3 Haiku.  Then scroll down to the bottom of the page and click the next button.  Then on the next page click the submit button.  Now you are setup to use this feature.  Look in the *Running the Guidance* section for more details on how to use this feature.
+5. Now scroll down until you see the Anthropic section and select Claude Haiku 4.5.  Then scroll down to the bottom of the page and click the next button.  Then on the next page click the submit button.  Now you are setup to use this feature.  Look in the *Running the Guidance* section for more details on how to use this feature.
+
+**NOTE: This solution uses Claude Haiku 4.5 via a cross-region (US) inference profile. Make sure you request model access to Claude Haiku 4.5 in the same region family (us-east-1) that the inference profile routes to.**
 
 ![](assets/Bedrock2.png)
 
@@ -341,19 +343,14 @@ This guidance demonstrates setting up a single playtest session and registering 
 
 ## Cleanup
 
-- Empty the S3 buckets that host the frontend application:
+Tearing down the solution is fully automated. From the `source` directory, run:
 
-    - Navigate to S3
-    - Locate and empty the two buckets that begin with "playtestingfrontendstack-xxxxxxxx"
+```
+npm run destroy-all
+```
 
-- Delete the API stack:
+This deletes all stacks (`PlaytestSolution`, `PlaytestingApiStack` in us-east-2, and `PlaytestingFrontendStack` in us-east-1). The S3 buckets that host the frontend are configured to purge their contents and delete automatically as part of the teardown, so there is no need to manually empty them first.
 
-    - Open the CloudFormation console (ensure you are in us-east-2, the default region for the API Stack)
-    - Select the PlaytestingApiStack
-    - Delete the stack
+**NOTE: This is a destructive operation. It removes the Cognito user pool (including the admin user), the DynamoDB tables (including any playtest/playtester data), the S3 buckets and their contents, and the CloudFront distribution.**
 
-- Delete the frontend stack:
-
-    - Open the CloudFormation console (ensure you are in us-east-1, the default region for the frontend stack)
-    - Select the PlaytestingFrontendStack
-    - Delete the stack
+Redeploying after a teardown is painless: just run `npm run deploy-all` again. The deployment writes the new stack values into a generated config file (`frontend/src/aws-config.generated.json`), so there is nothing to manually reset between a destroy and a fresh deploy.

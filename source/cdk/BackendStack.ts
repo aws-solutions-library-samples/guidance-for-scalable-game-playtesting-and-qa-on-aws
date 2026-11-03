@@ -27,7 +27,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         super(scope, id, props);
 
         // create the cognito user pool
-        const userPool = this.createAuth();
+        const { userPool, userPoolClient } = this.createAuth();
 
         const playtestingtable = this.createPlaytestingTable();
 
@@ -39,7 +39,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         // create an API Gateway with 2 endpoints and 1 stage
         // 1. endpoint allows to start stream sessions
         // 2. endpoint allows to get the available games from the meta data table
-        const stage = this.createRestAPI(userPool, playtestertable, playtestingtable, steplFunction);
+        const stage = this.createRestAPI(userPool, userPoolClient, playtestertable, playtestingtable, steplFunction);
         // attach a WAF ACL to the stage with basic rule sets to protect
         // The API
         this.createWebACL(stage);
@@ -427,14 +427,42 @@ export class PlaytestingApiStack extends cdk.Stack {
             },
         ]);
 
-        return userPool;
+        return { userPool, userPoolClient };
     }
 
-    private createRestAPI(userPool: cognito.UserPool, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine) {
-        // create a Cognito Authorizer for our API
-        const auth = new apigateway.CognitoUserPoolsAuthorizer(this, 'playtesting-authorized', {
-            cognitoUserPools: [userPool]
+    private createRestAPI(userPool: cognito.UserPool, userPoolClient: cognito.UserPoolClient, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine) {
+        // Group-based authorization is enforced by a custom Lambda (REQUEST) authorizer.
+        // The native Cognito authorizer only validates that a caller is signed in; it ignores
+        // the user's Cognito group, which previously let any authenticated playtester call
+        // admin-only endpoints. The Lambda authorizer verifies the Cognito JWT and allows/denies
+        // based on group membership (Admin = superset; Playtester = playtester route set only).
+        const authorizerLambda = new lambda.Function(this, 'PlayTestAuthorizerLambda', {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            handler: 'PlayTestAuthorizer.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestAuthorizer'),
+            timeout: Duration.seconds(10),
+            environment: {
+                "USER_POOL_ID": userPool.userPoolId,
+                "USER_POOL_CLIENT_ID": userPoolClient.userPoolClientId,
+            },
         });
+
+        const auth = new apigateway.RequestAuthorizer(this, 'playtesting-group-authorizer', {
+            handler: authorizerLambda,
+            identitySources: [apigateway.IdentitySource.header('Authorization')],
+            // Caching is disabled (TTL 0): API Gateway keys the authorizer cache only by the
+            // Authorization token, not by method/resource. With a per-route group decision, a
+            // cached result from one route must not be reused for another, so we evaluate every
+            // request. The per-request Lambda cost is negligible for this workload.
+            resultsCacheTtl: Duration.seconds(0),
+        });
+
+        NagSuppressions.addResourceSuppressions(authorizerLambda.role!, [
+            {
+                id: 'AwsSolutions-IAM4',
+                reason: 'Uses AWS managed policy for basic Lambda execution; acceptable for this authorizer function.'
+            }
+        ], true);
 
         const api = new apigateway.RestApi(this, 'playtesting-api', {
             restApiName: this.stackName + '-playtesting-api',
@@ -485,7 +513,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         // add the lambda as post action
         api.root.addMethod('POST', new apigateway.LambdaIntegration(PTGLStreamLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         ////
@@ -513,7 +541,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         arnParam.addMethod('GET', new apigateway.LambdaIntegration(getStreamSessionLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO
+            authorizationType: apigateway.AuthorizationType.CUSTOM
         });
 
          ///
@@ -668,26 +696,46 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         const aiSummary = api.root.addResource("aisummary")
 
+        // Bedrock config for the summarization/sentiment feature.
+        // Claude 3 Haiku reached EOL on 2026-09-10; we use Claude Haiku 4.5, which is only
+        // available on-demand through a cross-region inference profile ("us." prefixed ID).
+        const bedrockRegion = "us-east-1";
+        const bedrockInferenceProfileId = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+        const bedrockFoundationModelId = "anthropic.claude-haiku-4-5-20251001-v1:0";
+        // The US cross-region inference profile can route to any of these regions, so the
+        // foundation-model invoke permission must cover all of them.
+        const bedrockProfileRegions = ["us-east-1", "us-east-2", "us-west-2"];
+
         // generate summary
         const generateAISummaryLambda = new lambda.Function(this, 'PlaytestGenerateSummary', {
             runtime: lambda.Runtime.NODEJS_22_X,
             handler: 'PlaytestGenerateSummary.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGenerateSummary'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            environment: {
+                "BEDROCK_REGION": bedrockRegion,
+                "MODEL_ID": bedrockInferenceProfileId
+            },
             logGroup: lambdaLogGroup
         });
 
-        //I need to add more permissions to the policy for bedrock:InvokeModel
+        // Permission to invoke the model. Invoking through a cross-region inference profile
+        // requires InvokeModel on BOTH the inference profile ARN and the underlying
+        // foundation-model ARN in every region the profile can route to.
+        const bedrockModelResources = [
+            `arn:aws:bedrock:${bedrockRegion}:${this.account}:inference-profile/${bedrockInferenceProfileId}`,
+            ...bedrockProfileRegions.map(r => `arn:aws:bedrock:${r}::foundation-model/${bedrockFoundationModelId}`)
+        ];
         generateAISummaryLambda.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ["bedrock:InvokeModel"],
-            resources: ["*"]
+            resources: bedrockModelResources
         }))
 
         //I need to add a get method called /PlaytestGenerateSummary
         aiSummary.addMethod('POST', new apigateway.LambdaIntegration(generateAISummaryLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -715,7 +763,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a get method called /PlaytestGenerateSummary
         getS3Buckets.addMethod('GET', new apigateway.LambdaIntegration(getBucketsLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -743,7 +791,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a get method called /PlaytestGenerateSummary
         getS3BucketObjects.addMethod('POST', new apigateway.LambdaIntegration(getBucketObjectsLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -776,13 +824,13 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a post method called /playtesters
         playtester.addMethod('POST', new apigateway.LambdaIntegration(playtesters), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         //I need to add a get method called /playtesters
         playtester.addMethod('GET', new apigateway.LambdaIntegration(playtesters), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
 
@@ -818,7 +866,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a post method called /validate that uses a apikey but no authorization
         validate.addMethod('GET', new apigateway.LambdaIntegration(validatePlayer), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
 
@@ -871,25 +919,25 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a post method called /playtestsessions
         playtestSession.addMethod('POST', new apigateway.LambdaIntegration(playtestSessionLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         //I need to add a put method called /playtestsessions
         playtestSession.addMethod('PUT', new apigateway.LambdaIntegration(playtestSessionLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         //I need to add a delete method
         playtestSession.addMethod('DELETE', new apigateway.LambdaIntegration(playtestSessionLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         //I need to add a get method called /playtestsessions
         playtestSession.addMethod('GET', new apigateway.LambdaIntegration(playtestSessionLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -924,7 +972,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a get method called /playtestsessions
         playtestSessionObservations.addMethod('GET', new apigateway.LambdaIntegration(playtestSessionObsLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -952,7 +1000,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a get method
         playtestListGLApplications.addMethod('GET', new apigateway.LambdaIntegration(PlayTestGLSListApplicationsLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
         /////
@@ -980,7 +1028,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         //I need to add a get method
         playtestGetStreamGroupRegions.addMethod('POST', new apigateway.LambdaIntegration(PlayTestGetStreamGroupRegionsLambda), {
             authorizer: auth,
-            authorizationType: apigateway.AuthorizationType.COGNITO,
+            authorizationType: apigateway.AuthorizationType.CUSTOM,
         });
 
 
