@@ -71,7 +71,7 @@ export class PlaytestingApiStack extends cdk.Stack {
     private createStepFunctions(playtestsessiontable: ddb.Table): sfn.StateMachine {
         // Lambda to update DynamoDB status to ERROR
         const StepFunctionUpdateStatusLambda = new lambda.Function(this, 'StepFunctionUpdateStatusLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionUpdateStatus'), // path to your lambda function
             handler: 'PlayTestStepFunctionUpdateStatus.handler',
             timeout: Duration.seconds(30),
@@ -82,7 +82,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //Lambda to call GameLift Streams GetApplication
         const StepFunctionGetApplicationLambda = new lambda.Function(this, 'PlayTestGetGLAppStatus', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             code: lambda.Code.fromAsset('lambdas/PlayTestGetGLAppStatus'), // path to your lambda function
             handler: 'PlayTestGetGLAppStatus.handler',
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -93,7 +93,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //need to create lambda function that creates a stream gorup
         const StepFunctionCreateStreamGroupLambda = new lambda.Function(this, 'PlayTestStepFunctionCreateStreamGroupLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestStepFunctionCreateStreamGroup.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionCreateStreamGroup'),
             timeout: cdk.Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -101,13 +101,13 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //function to check for when stream group is finished creating
         const getStreamGroupStatusLambda = new lambda.Function(this, 'PlayTestStepFunctionGetSreamGroupLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestStepFunctionGetSreamGroup.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStepFunctionGetSreamGroup'),
         });
 
         const associateApplicationLambda = new lambda.Function(this, 'PlayTestAssociateApplicationLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestAssociateApplication.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestAssociateApplication'),
         });
@@ -437,7 +437,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         // admin-only endpoints. The Lambda authorizer verifies the Cognito JWT and allows/denies
         // based on group membership (Admin = superset; Playtester = playtester route set only).
         const authorizerLambda = new lambda.Function(this, 'PlayTestAuthorizerLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestAuthorizer.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestAuthorizer'),
             timeout: Duration.seconds(10),
@@ -492,7 +492,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         })
 
         const PTGLStreamLambda = new lambda.Function(this, 'PTGLStreamLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestStartStream.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStartStream'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -526,7 +526,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // list all available games from DynamoDB
         const getStreamSessionLambda = new lambda.Function(this, 'gamelift-streams-get-stream-session-lambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetStream.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetStream'),
             timeout: cdk.Duration.seconds(10),
@@ -552,7 +552,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // Get playtest sessions used for registration
         const getPlaytestersTestSessionsLambda = new lambda.Function(this, 'GetPlaytestersTestSessions', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetPlaytestersTestSessions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetPlaytestersTestSessions'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -587,7 +587,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // Get playtest sessions used for registration
         const getPlayTestSessionsLambda = new lambda.Function(this, 'GetPlayTestSessions', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetPlayTestSessions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetPlayTestSessions'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -619,7 +619,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // lambda for getting URL
         const getPlaytesterURLLambda = new lambda.Function(this, 'PlayTestGetPlayTestURL', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetPlayTestURL.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetPlayTestURL'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -648,7 +648,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // register a playtester
         const registerPlayer = new lambda.Function(this, 'PlaytesterRegister', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayerRegistration.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestRegisterPlayer'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -708,7 +708,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // generate summary
         const generateAISummaryLambda = new lambda.Function(this, 'PlaytestGenerateSummary', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlaytestGenerateSummary.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGenerateSummary'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -746,7 +746,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // get buckets
         const getBucketsLambda = new lambda.Function(this, 'GetBucketsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetBuckets.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetBuckets'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -774,7 +774,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // get buckets
         const getBucketObjectsLambda = new lambda.Function(this, 'GetBucketObjectsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetBucketObjects.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetBucketObjects'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -802,7 +802,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // register a playtester
         const playtesters = new lambda.Function(this, 'Playtesters', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'Playtesters.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTesters'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -842,7 +842,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // validate a playtester
         const validatePlayer = new lambda.Function(this, 'PlaytesterValidate', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayerValidate.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTesterValidation'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -878,7 +878,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // setting up lambda
         const playtestSessionLambda = new lambda.Function(this, 'PlayTestSessionsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestSessions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestSessions'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -948,7 +948,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //setting up lambda
         const playtestSessionObsLambda = new lambda.Function(this, 'playtestSessionObsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestObservations.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestObservations'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -983,7 +983,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //setting up lambda
         const PlayTestGLSListApplicationsLambda = new lambda.Function(this, 'PlayTestGLSListApplicationsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGLSListApplications.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGLSListApplications'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
@@ -1011,7 +1011,7 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //setting up lambda
         const PlayTestGetStreamGroupRegionsLambda = new lambda.Function(this, 'PlayTestGetStreamGroupRegionsLambda', {
-            runtime: lambda.Runtime.NODEJS_22_X,
+            runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestGetStreamGroupRegions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestGetStreamGroupRegions'),
             timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
