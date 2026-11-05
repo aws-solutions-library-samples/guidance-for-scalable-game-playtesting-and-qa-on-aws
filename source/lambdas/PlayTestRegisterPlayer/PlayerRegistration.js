@@ -4,13 +4,17 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { 
     CognitoIdentityProviderClient,
     AdminCreateUserCommand,
-    AdminSetUserPasswordCommand
+    AdminSetUserPasswordCommand,
+    AdminAddUserToGroupCommand
 } from "@aws-sdk/client-cognito-identity-provider";
 import crypto from 'crypto';
 
 const ssmClient = new SSMClient();
 const dynamoDB = DynamoDBDocument.from(new DynamoDB());
 const cognitoClient = new CognitoIdentityProviderClient();
+
+// Must match the group the API's Lambda authorizer allows on playtester routes.
+const PLAYTESTER_GROUP = "Playtester";
 
 
 const generateHash = (stringValue, salt) => {
@@ -68,6 +72,16 @@ export const handler = async (event) => {
             // User already exists - continue with the flow
             userExists = true;
         }
+
+        // Add the user to the Playtester group. The API's Lambda authorizer denies users
+        // with no group, so without this a registered playtester could sign in but every
+        // playtester API call would return 403. This is idempotent, so it also repairs
+        // existing users who registered before group assignment was added.
+        await cognitoClient.send(new AdminAddUserToGroupCommand({
+            UserPoolId: process.env.COGNITO_USER_POOL_ID,
+            Username: playtesterId,
+            GroupName: PLAYTESTER_GROUP
+        }));
 
 
         // Get URL from Parameter Store

@@ -666,7 +666,8 @@ export class PlaytestingApiStack extends cdk.Stack {
             effect: iam.Effect.ALLOW,
             actions: [
                 "cognito-idp:AdminCreateUser",
-                "cognito-idp:AdminSetUserPassword"
+                "cognito-idp:AdminSetUserPassword",
+                "cognito-idp:AdminAddUserToGroup"
             ],
             resources: [userPool.userPoolArn]  // Use the specific ARN of your user pool
         }));
