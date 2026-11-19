@@ -8,24 +8,28 @@
 3. [Deployment Steps](#deployment-steps)
     - [Deploying Discord Bot](#deploying-discord-bot)
 4. [Enabling Sentiment Analysis](#enabling-sentiment-analysis)
-5. [Deployment Validation](#deployment-validation)
-6. [Running the Guidance](#running-the-guidance)
+5. [Enabling Forensic Watermarking](#enabling-forensic-watermarking)
+6. [Deployment Validation](#deployment-validation)
+7. [Running the Guidance](#running-the-guidance)
     - [Admin](#admin)
         - [Logging In](#logging-in)
         - [Home Page and Dashboard](#home-page-and-dashboard)
         - [Managing your playtests](#managing-your-playtests)
         - [Sentiment Analysis and Summarizations](#sentiment-analysis-and-summarizations)
+        - [Watermark Analyzer](#watermark-analyzer)
     - [Playtesters](#playtesters)
         - [Playtester Logging In](#playtester-logging-in)
         - [Playtesting](#playtesting)
     - [Running the Bot](#running-the-bot)
-7. [Next Steps](#next-steps)
-8. [Cleanup](#cleanup)
+8. [Next Steps](#next-steps)
+9. [Cleanup](#cleanup)
 
 
 ## Overview
 
 This guidance helps customers by providing a starter kit for their playtesting needs. Today, customers face many challenges with playtesting. One of those challenges is not having an easy way for playtesters to signup for playtesting. Another challenge is coordinating client-side builds across many unique PC setups around the world. Furthermore, the concern around sharing pre-launch gaming builds can become quite a scary experience for new startups, as they have to find ways to best secure their IP. With this guidance, customers can leverage a full solution made up of three parts: 1. React front end that enables customers to serve their player base with a streamed playtesting experience as well as a full administrative portal for studios and publishers; 2. Full backend infrastructure enabling the frontend via APIs, secured with [AWS WAF](https://aws.amazon.com/waf/) as well as [Amazon Cognito](https://aws.amazon.com/cognito/) for authorization; 3. A starter Discord bot setup that allows playtesters to never leave Discord to "Opt-In" and register for playtest sessions.
+
+To further protect pre-launch builds, playtest sessions can optionally use **forensic watermarking**. A near-invisible pattern, unique to each playtester's stream, is added to the game's video on the streaming host. If footage of the playtest leaks (for example a recording posted to YouTube in violation of an NDA), the studio can take a screenshot of it and use the built-in Watermark Analyzer to identify which playtester and which playtest session it came from. See [Enabling Forensic Watermarking](#enabling-forensic-watermarking).
 
 ![](source/architecture/playtesting-solution-architecture.png)
 
@@ -57,6 +61,7 @@ The following table provides a sample cost breakdown for deploying this Guidance
 | AWS Web Application Firewall (WAF) | Number of Web Access Control Lists (Web ACLs) utilized (2 per month), Number of Rules added per Web ACL (5 per month) | $ 20.60 |
 | Amazon Bedrock | Claude Haiku 4.5, 1 avg request per minute for 8 hours per day.  100 average input tokens with 500 average output tokens | $ 9.36 |
 | Amazon GameLift Streams | 100 players streaming 8 hours per day, for 7 days, using Windows Gen5 stream class at $2.13 per hour | $ 11,928.00 |
+| Forensic watermarking (optional) | Watermark rendering adds no GameLift Streams cost. DynamoDB seed records (one small item per stream start), AWS Lambda analysis at roughly $0.01 per screenshot analyzed, and S3 storage for saved evidence screenshots | < $ 1.00 |
 
 ## Prerequisites
 
@@ -69,6 +74,7 @@ These deployment instructions work on both Windows and Mac-based operating syste
 - Use the [AWS Cloud Development Kit](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) (AWS CDK).  You can use aws configure via AWS CLI or other mechanisms to authenticate your terminal to use CDK
 - Make sure you have installed [AWS Command Line Interface](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-install.html) (AWS CLI)
 - Make sure you have your [AWS Profile](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-configure.html) set up to point to the correct account and the us-east-2 region
+- (Optional, only if you plan to use forensic watermarking) Install [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch). The watermark host components are compiled inside containers, so no other build tools are needed
 
 
 
@@ -140,6 +146,59 @@ This is an optional step.  However, if you do not enable this section of the sol
 
 ![](assets/Bedrock2.png)
 
+## Enabling Forensic Watermarking
+
+<!-- DRAFT: documents the planned forensic watermarking feature. Not implemented yet; do not merge until the feature ships. Screenshots to be added. -->
+
+This is an optional step. Forensic watermarking lets you trace leaked footage of a playtest back to the playtester who recorded it. If you do not plan to use it, you can skip this section; playtest sessions are not watermarked unless you turn it on.
+
+### How it works
+
+When watermarking is enabled for a playtest session, every playtester's stream gets a near-invisible pattern added to each video frame. The pattern is drawn **on the GameLift Streams host, before the video is encoded**, so it is present in anything a playtester can capture: screen recordings, capture cards, the browser's video stream, and even a phone photo of the monitor. Your game's code is not modified, and the mark adds no frame of latency.
+
+Each time a playtester starts a stream, the backend generates a new random 128-bit seed for the pattern. It records which playtester and playtest session the seed was issued to, and passes the seed to the streaming host. The seed is never sent to the playtester's browser. Later, the Watermark Analyzer compares a screenshot against the recorded seeds and reports which one is present.
+
+### Supported runtimes
+
+| Runtime | Supported | How the mark is added |
+|---|---|---|
+| Proton (8.0-5, 9) | Yes | A Vulkan layer that ships inside your game package |
+| Microsoft Windows Server 2022 Base | Yes (Direct3D 11 and Direct3D 12 games) | A proxy `dxgi.dll` that ships next to your game's executable |
+| Ubuntu 22.04 LTS | No | Not supported; the watermark toggle is disabled for this runtime |
+
+**NOTE: Proton 8.0-2c has not been validated. Games that render with Vulkan on the Windows runtime are not currently supported.**
+
+### Step 1: Build the watermark host components
+
+The host components are built from source inside containers, so you need [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch) and network access. From the `source` directory, run:
+
+```npm run build-watermark```
+
+The first build takes several minutes because it prepares the shader compilers; later builds are cached.
+
+### Step 2: Add the components to your game package
+
+Watermarking only works if the host components are part of the game's GameLift Streams application package. Add them to the S3 folder that holds your game **before** you create the playtest session that uses it:
+
+```npm run stage-watermark -- --game s3://<your-bucket>/<your-game-folder>/ --runtime <proton|windows> --exe <path/to/your-game.exe>```
+
+- For **Proton**, this adds a `wmlayer/` folder and an `xdg/` folder to your game folder.
+- For **Windows**, this adds `dxgi.dll` next to the executable you pass with `--exe` (Windows only searches the executable's folder for it).
+
+Nothing else in your game folder is changed.
+
+**NOTE: GameLift Streams applications cannot be changed after they are created. A game that was added before its folder contained the watermark components cannot be watermarked; choose *Add New Game* again after staging the components. When you enable watermarking, the solution checks the game package and stops you with an error if the components are missing, so a session can never silently run without a mark.**
+
+### Before you use watermarking
+
+- **Anti-cheat:** anti-cheat systems commonly block proxy DLLs and graphics hooks. Build your playtest with anti-cheat disabled, or check with your anti-cheat vendor about allowlisting.
+- **Permission:** if you are streaming a title you do not own outright, confirm the publisher agreement allows additional files in the build's package.
+- **Tune for your content:** the default mark strength and detection threshold were measured on a small set of titles. Test with your own game. At the default strength, the pattern can be faintly visible on large flat areas of the screen.
+- **What it does not cover:** the watermark survives cropping, rescaling, mirroring, 90-degree rotation and heavy JPEG compression. It does not survive arbitrary-angle rotation, and a determined attacker with signal-processing tools may be able to weaken it. Treat it as a strong deterrent and investigation tool, not a guarantee.
+- **The watermark host components are a proof of concept** and are provided without support.
+
+See [Managing your playtests](#managing-your-playtests) to turn watermarking on for a session, and [Watermark Analyzer](#watermark-analyzer) to investigate a leak.
+
 ## Deployment Validation
 
 * Open the CloudFormation console and verify the status of the templates PlaytestingFrontendStack in us-east-1 (N. Virgina) and PlaytestingApiStack in us-east-2 (Ohio).
@@ -176,6 +235,7 @@ After successfully logging in you will be routed to the home page/Dashboard.  On
 - Start Date: The date that you wish the playtest session to be available.
 - End Date:  The date tht you wish the playtest session to end (this is an inclusive date).
 - Enabled: Is this playtest session currently enabled?
+- Forensic Watermarking: Does this playtest session add a per-playtester forensic watermark to every stream? (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking))
 - Status: A playtest session could be in various status (Active, Error, Intializing)
 
 
@@ -213,6 +273,9 @@ On step 3 you are setting up your streaming details.  This includes creating a s
 **NOTES:  Make sure you have the capacity available for the regions you are selecting or you will get an error creating the playtest session.  Check with your account team if you are unsure about region capacity for GameLift Stream groups**
 
 ![](assets/Manage_CreateNew4.png)
+
+<!-- DRAFT: watermark toggle walkthrough; add a screenshot once the UI exists. -->
+Also on this step you can turn on *Forensic Watermarking* for the playtest session. When it's on, every playtester's stream carries a near-invisible watermark that identifies them, which you can later check with the [Watermark Analyzer](#watermark-analyzer). The toggle is only available for Proton and Windows runtimes, and your game's package must already contain the watermark components (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking)). If they're missing, you'll see an error explaining what to add before you can continue. You can also turn watermarking on or off later when updating a playtest session. The change applies to streams started after you save it.
 
 Step 4 we are selecting the start date, start time, and end date of the playtest session.  If playtesters try to playtest outside of this range they will not be able to.  After setting your playtest date range navigate to the next step.
 
@@ -275,6 +338,36 @@ Now as long as a playtest session is selected and you have some recorded observa
 If you try to engage with the model without any data you will get a "Wild error" and we don't want that!
 
 ![](assets/SummarizeError.png)
+
+### Watermark Analyzer
+
+<!-- DRAFT: documents the planned Watermark Analyzer page. Screenshots to be added once the UI exists. -->
+
+The Watermark Analyzer identifies which playtester and playtest session a piece of leaked footage came from. For example: a studio runs a weekend playtest with forensic watermarking turned on, and on Monday a recording of the build shows up on YouTube. The studio takes a screenshot of the video and runs it through the analyzer to find out who recorded it.
+
+1. Click *Watermark Analyzer* on the left side of the screen.
+
+2. Select the playtest session you believe the footage came from. If you are not sure, choose *All sessions*. Narrowing to one session is faster and gives the most reliable result.
+
+3. Upload a screenshot of the footage (PNG, JPEG or WebP). For the best results:
+    - Use the highest-quality frame you can get: pause the video at full screen at its highest resolution rather than capturing a thumbnail.
+    - Pick a frame with plenty of detail on screen; very dark or blurry frames carry less of the mark.
+    - Crop out the video player and anything around the game if you can. Black letterbox bars are trimmed automatically.
+    - The screenshot must be at least 256 x 256 pixels.
+
+4. Click *Analyze*. The analyzer first checks whether the image is at its original scale. If it isn't (common for screenshots and photos of a screen), it searches a range of scales, which takes around 5 to 15 seconds.
+
+5. Review the result:
+    - **Watermark identified:** shows the playtester (their Discord username), the playtest session and game, when and where they started the stream, and a detection score. A score above the threshold of 8 is a match; a genuine match typically scores far higher (often 100 or more on a clean capture), while unrelated playtesters score around 5. The gap between the top result and the runner-up is also shown; a large gap means a clear identification.
+    - **No watermark found:** no recorded seed scored above the threshold. Common reasons: the session was not watermarked, the wrong playtest session was selected, the image was rotated at an angle, or the image is too small, blurry or heavily processed. Try *All sessions*, or a different, sharper frame.
+
+A *Details* panel lists the closest candidates and how the image was processed, which helps when a result is borderline.
+
+#### Managing evidence
+
+Every analysis is saved as an evidence record: the screenshot you uploaded, the result, which admin ran it, and when. Saved records appear in the *Evidence* list on the Watermark Analyzer page, where you can open one to review the screenshot and result again. Evidence is kept until you delete it, so once an investigation is settled, select the records and click *Delete*. This permanently removes the screenshots and results.
+
+**NOTES: The Watermark Analyzer and its evidence are only available to admins. Evidence records name the identified playtester, so treat them as personal data under your studio's data-handling policies. Watermark records are kept when you delete a playtest session, so you can still investigate a leak after a session has ended.**
 
 ### Playtesters
 
@@ -352,5 +445,8 @@ npm run destroy-all
 This deletes all stacks (`PlaytestSolution`, `PlaytestingApiStack` in us-east-2, and `PlaytestingFrontendStack` in us-east-1). The S3 buckets that host the frontend are configured to purge their contents and delete automatically as part of the teardown, so there is no need to manually empty them first.
 
 **NOTE: This is a destructive operation. It removes the Cognito user pool (including the admin user), the DynamoDB tables (including any playtest/playtester data), the S3 buckets and their contents, and the CloudFront distribution.**
+
+<!-- DRAFT: watermark cleanup note. -->
+**NOTE: If you used forensic watermarking, tearing down the solution also deletes the watermark seed records and all saved evidence (screenshots and results). Without the seed records, footage from those playtests can no longer be traced. If you want to keep any of this, copy it somewhere outside the solution before running `destroy-all`; anything you copy elsewhere is not touched by the teardown. The watermark files you staged into your own game's S3 folder are also not removed; delete the `wmlayer/` and `xdg/` folders (Proton) or `dxgi.dll` (Windows) yourself if you no longer need them.**
 
 Redeploying after a teardown is painless: just run `npm run deploy-all` again. The deployment writes the new stack values into a generated config file (`frontend/src/aws-config.generated.json`), so there is nothing to manually reset between a destroy and a fresh deploy.

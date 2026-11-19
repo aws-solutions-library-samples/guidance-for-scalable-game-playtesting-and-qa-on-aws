@@ -15,11 +15,17 @@ import TimeInput from "@cloudscape-design/components/time-input";
 import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
 import Textarea from "@cloudscape-design/components/textarea";
+import Toggle from "@cloudscape-design/components/toggle";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 
 
 
 import { withRouter } from "./Utility/withRouter";
+import { apiErrorMessage } from "./Utility/apiErrorMessage";
 import { fetchAuthSession } from "aws-amplify/auth";
+
+const WATERMARK_ALPHA_MIN = 1;
+const WATERMARK_ALPHA_MAX = 64;
 
 interface PlaySessionsProps {
     navigate: (path: string) => void; //Add navigate prop
@@ -50,6 +56,8 @@ interface PlaytestSession {
     game: string;
     studio: string;
     observations: Observation[];
+    watermarkEnabled?: boolean;        // absent on sessions created before watermarking existed
+    watermarkAlpha?: number | string;
 }
 
 class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState> {
@@ -202,6 +210,13 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
     };
 
 
+    isWatermarkAlphaValid(): boolean {
+        const raw = String(this.state.selectedSessionData?.watermarkAlpha ?? "").trim();
+        if (raw === "") return true; // blank means the default strength
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= WATERMARK_ALPHA_MIN && n <= WATERMARK_ALPHA_MAX;
+    }
+
     // Handle Update Button Click
     updatePlaytestSession = async () => {
         if (!this.state.selectedSessionData) return;
@@ -232,7 +247,8 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
 
             this.setState({
                 updateSuccessMessage: null,
-                updateErrorMessage: "Failed to update playtest session. Please try again.",
+                // Show the backend's reason (e.g. a failed watermark package check).
+                updateErrorMessage: apiErrorMessage(error, "Failed to update playtest session. Please try again."),
             });
 
         }
@@ -312,6 +328,7 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                             { id: "startDate", header: "Start Date", cell: (item) => item.startDate },
                             { id: "endDate", header: "End Date", cell: (item) => item.endDate },
                             { id: "enabled", header: "Enabled", cell: (item) => (item.enabled ? "Yes" : "No") },
+                            { id: "watermarkEnabled", header: "Watermarked", cell: (item) => (item.watermarkEnabled ? "Yes" : "No") },
                         ]}
                         items={this.state.playtestSessions}
                         selectionType="single"
@@ -379,6 +396,35 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
                                     </Checkbox>
                                 </FormField>
 
+                                <FormField
+                                    label="Forensic watermarking"
+                                    description="Applies to streams started after you save. Turning it on checks the game package for the watermark components."
+                                >
+                                    <Toggle
+                                        checked={this.state.selectedSessionData.watermarkEnabled === true}
+                                        onChange={({ detail }) => this.handleInputChange("watermarkEnabled", detail.checked)}
+                                    >
+                                        Enable forensic watermarking
+                                    </Toggle>
+                                </FormField>
+
+                                {this.state.selectedSessionData.watermarkEnabled === true && (
+                                    <ExpandableSection headerText="Advanced watermark settings">
+                                        <FormField
+                                            label="Watermark strength"
+                                            description={`From ${WATERMARK_ALPHA_MIN} to ${WATERMARK_ALPHA_MAX}. Leave blank for the default of 8.`}
+                                            errorText={this.isWatermarkAlphaValid() ? "" : `Enter a number from ${WATERMARK_ALPHA_MIN} to ${WATERMARK_ALPHA_MAX}.`}
+                                        >
+                                            <Input
+                                                type="number"
+                                                inputMode="numeric"
+                                                value={String(this.state.selectedSessionData.watermarkAlpha ?? "")}
+                                                onChange={({ detail }) => this.handleInputChange("watermarkAlpha", detail.value)}
+                                            />
+                                        </FormField>
+                                    </ExpandableSection>
+                                )}
+
                                 {/* Wrap Observations in a Separate Container */}
                                 <Container header={<Header variant="h3">Questions to ask playtesters</Header>} className="observations-container">
                                     <SpaceBetween size="m">
@@ -421,7 +467,13 @@ class PlaySessions extends React.Component<PlaySessionsProps, PlaySessionsState>
 
 
                                 {/* Update Button */}
-                                <Button onClick={this.updatePlaytestSession} variant="primary">Update Playtest Session</Button>
+                                <Button
+                                    onClick={this.updatePlaytestSession}
+                                    variant="primary"
+                                    disabled={this.state.selectedSessionData.watermarkEnabled === true && !this.isWatermarkAlphaValid()}
+                                >
+                                    Update Playtest Session
+                                </Button>
                             </SpaceBetween>
                         </Container>
                     )}

@@ -33,13 +33,16 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         const playtestertable = this.createPlaytesterTable();
 
+        // forensic watermarking: seed -> playtester/session binding
+        const watermarkSeedTable = this.createWatermarkSeedTable();
+
         //Create StepFunctions
         const steplFunction = this.createStepFunctions(playtestingtable);
 
         // create an API Gateway with 2 endpoints and 1 stage
         // 1. endpoint allows to start stream sessions
         // 2. endpoint allows to get the available games from the meta data table
-        const stage = this.createRestAPI(userPool, userPoolClient, playtestertable, playtestingtable, steplFunction);
+        const stage = this.createRestAPI(userPool, userPoolClient, playtestertable, playtestingtable, steplFunction, watermarkSeedTable);
         // attach a WAF ACL to the stage with basic rule sets to protect
         // The API
         this.createWebACL(stage);
@@ -326,6 +329,33 @@ export class PlaytestingApiStack extends cdk.Stack {
         return stepFunction;
     }
 
+    // Forensic watermarking identity store: one item per watermarked stream start, mapping
+    // the per-stream seed to the playtester and playtest session it was issued to. Items
+    // are kept when a playtest session is deleted (they carry snapshots of its name), so a
+    // leak can still be investigated after a playtest ends. destroy-all removes the table.
+    private createWatermarkSeedTable() {
+        const table = new ddb.Table(this, "watermarkseeds", {
+            partitionKey: { name: "seed", type: AttributeType.STRING },
+            billingMode: BillingMode.PAY_PER_REQUEST,
+            encryption: ddb.TableEncryption.AWS_MANAGED,
+            pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+            removalPolicy: RemovalPolicy.DESTROY
+        })
+
+        // lets the analyzer limit the candidate seeds to one playtest session, newest first
+        table.addGlobalSecondaryIndex({
+            indexName: "playtestingID-createdAt-index",
+            partitionKey: { name: "playtestingID", type: AttributeType.STRING },
+            sortKey: { name: "createdAt", type: AttributeType.STRING }
+        });
+
+        new CfnOutput(this, "WatermarkSeedTableName", {
+            value: table.tableName
+        });
+
+        return table;
+    }
+
     private createPlaytesterTable() {
         const table = new ddb.Table(this, "playtesters", {
             partitionKey: { name: "playtesterID", type: AttributeType.STRING },
@@ -430,7 +460,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         return { userPool, userPoolClient };
     }
 
-    private createRestAPI(userPool: cognito.UserPool, userPoolClient: cognito.UserPoolClient, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine) {
+    private createRestAPI(userPool: cognito.UserPool, userPoolClient: cognito.UserPoolClient, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine, watermarkSeedTable: ddb.Table) {
         // Group-based authorization is enforced by a custom Lambda (REQUEST) authorizer.
         // The native Cognito authorizer only validates that a caller is signed in; it ignores
         // the user's Cognito group, which previously let any authenticated playtester call
@@ -495,19 +525,37 @@ export class PlaytestingApiStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestStartStream.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestStartStream'),
-            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            timeout: Duration.seconds(15), // session + registration lookups and the watermark seed write
             environment: {
-                "CONNECTION_TIMEOUT": "10"
+                "CONNECTION_TIMEOUT": "10",
+                "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName,
+                "PLAYTESTERS_TABLE": playtestertable.tableName,
+                "WATERMARK_SEED_TABLE": watermarkSeedTable.tableName
             },
             logGroup: lambdaLogGroup
         });
 
         // allow the lambda to start stream sessions of any SG
         // allow to get stream sessions to validate if they are active
+        // GetApplication: read the game's runtime to pick the watermark session variables
         PTGLStreamLambda.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
-            actions: ["gameliftstreams:StartStreamSession", "gameliftstreams:GetStreamSession"],
+            actions: ["gameliftstreams:StartStreamSession", "gameliftstreams:GetStreamSession", "gameliftstreams:GetApplication"],
             resources: [`arn:aws:gameliftstreams:*:${this.account}:*`]
+        }))
+
+        // look up the playtest session and the caller's registration before starting
+        PTGLStreamLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["dynamodb:GetItem"],
+            resources: [playtestsessiontable.tableArn, playtestertable.tableArn]
+        }))
+
+        // record the watermark seed for the stream (and remove it if the stream fails to start)
+        PTGLStreamLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"],
+            resources: [watermarkSeedTable.tableArn]
         }))
 
         // add the lambda as post action
@@ -906,7 +954,9 @@ export class PlaytestingApiStack extends cdk.Stack {
         //Add more to policy for GL Streams
         playtestSessionLambda.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
-            actions: ['gameliftstreams:CreateApplication', 'gameliftstreams:DeleteStreamGroup'],
+            // GetApplication: read an existing game's package location to check it for
+            // the forensic watermark components before watermarking is enabled.
+            actions: ['gameliftstreams:CreateApplication', 'gameliftstreams:DeleteStreamGroup', 'gameliftstreams:GetApplication'],
             resources: [`arn:aws:gameliftstreams:*:${this.account}:*`] // hardened to account level
         }));
 

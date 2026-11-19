@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "cdk": "cdk",
     "install-all": "npm install && npm-run-all iall:* && npm run ensure-config",
     "iall:PlayTestAssociateApplication-lambda": "cd lambdas/PlayTestAssociateApplication && npm install",
