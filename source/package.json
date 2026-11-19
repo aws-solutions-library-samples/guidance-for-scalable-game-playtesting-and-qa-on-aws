@@ -29,7 +29,10 @@
     "deploy-frontend": "node scripts/update-react-config.js && npm run build-frontend && cdk deploy PlaytestingFrontendStack --require-approval never",
     "post-deploy": "npm run update-params",
     "deploy-all": "npm run pre-deploy && npm run deploy-api && npm run create-user && node scripts/check-deployment.js && npm run deploy-frontend && npm run post-deploy",
-    "destroy-all": "cdk destroy --all --force"
+    "destroy-all": "cdk destroy --all --force",
+    "build-watermark": "node scripts/build-watermark.js",
+    "stage-watermark": "node scripts/stage-watermark.js",
+    "check-publishable": "node scripts/check-publishable.js"
   },
   "devDependencies": {
     "@types/node": "22.7.9",
@@ -44,6 +47,7 @@
     "@aws-sdk/client-cloudformation": "^3.1161.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1161.0",
     "@aws-sdk/client-gameliftstreams": "^3.1161.0",
+    "@aws-sdk/client-s3": "^3.1173.0",
     "@aws-sdk/client-ssm": "^3.1161.0",
     "aws-cdk-lib": "2.275.0",
     "constructs": "^10.4.2",

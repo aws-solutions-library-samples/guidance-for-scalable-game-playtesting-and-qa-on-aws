@@ -1,0 +1,17 @@
+{
+  "file_format_version": "1.0.0",
+  "layer": {
+    "name": "VK_LAYER_WMPOC_watermark",
+    "type": "GLOBAL",
+    "library_path": "/home/unpriv/games/wmlayer/libVkLayer_wmpoc.so",
+    "api_version": "1.3.204",
+    "implementation_version": "1",
+    "description": "GLS watermark POC - marks the swapchain image before capture",
+    "functions": {
+      "vkGetInstanceProcAddr": "wmpoc_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr": "wmpoc_GetDeviceProcAddr"
+    },
+    "enable_environment": { "ENABLE_WMPOC": "1" },
+    "disable_environment": { "DISABLE_WMPOC": "1" }
+  }
+}

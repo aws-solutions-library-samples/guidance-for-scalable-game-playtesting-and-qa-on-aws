@@ -1,0 +1,32 @@
+; Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+; SPDX-License-Identifier: MIT-0
+; From the Amazon GameLift Streams forensic watermarking sample; see source/watermark/NOTICE.md.
+; Export table for the proxy dxgi.dll. Must name every export of the system
+; dxgi.dll: d3d11.dll and d3d12.dll import the private DXGID3D10* and Compat*
+; entries by name, and an unresolved import fails the module load. The probe
+; logs any name it finds in the real DLL that is missing from this list.
+LIBRARY dxgi.dll
+EXPORTS
+    ApplyCompatResolutionQuirking
+    CompatString
+    CompatValue
+    CreateDXGIFactory
+    CreateDXGIFactory1
+    CreateDXGIFactory2
+    DXGID3D10CreateDevice
+    DXGID3D10CreateLayeredDevice
+    DXGID3D10ETWRundown
+    DXGID3D10GetLayeredDeviceSize
+    DXGID3D10RegisterLayers
+    DXGIDeclareAdapterRemovalSupport
+    DXGIDisableVBlankVirtualization
+    DXGIDumpJournal
+    DXGIGetDebugInterface1
+    DXGIReportAdapterConfiguration
+    PIXBeginCapture
+    PIXEndCapture
+    PIXGetCaptureState
+    PIXGetThreadInfo
+    SetAppCompatStringPointer
+    UpdateHISTORY
+    UpdateHMDEmulationStatus
