@@ -148,14 +148,53 @@ function buildWindows() {
     console.log(`[build-watermark] Windows payload ready in ${dest}`);
 }
 
+// True if the payload exists and is newer than every source it is built from.
+function upToDate(outputs, sourceDirs) {
+    if (!outputs.every((o) => fs.existsSync(o))) return false;
+    const built = Math.min(...outputs.map((o) => fs.statSync(o).mtimeMs));
+    const newest = (dir) => fs.readdirSync(dir, { withFileTypes: true }).reduce((m, e) => {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) return Math.max(m, newest(p));
+        if (/\.(dll|so|spv)$|shaders_bytecode\.h$|shaders_spv\.h$/.test(e.name)) return m; // generated
+        return Math.max(m, fs.statSync(p).mtimeMs);
+    }, 0);
+    return sourceDirs.every((d) => newest(path.join(HOST, d)) <= built);
+}
+
 const argv = process.argv.slice(2);
 const i = argv.indexOf("--runtime");
 const runtime = i >= 0 ? String(argv[i + 1] || "").toLowerCase() : "all";
+// --if-available: used by deploy-all. Skip quietly when no container engine is running
+// (watermarking is optional), and skip a runtime whose payload is already up to date.
+const ifAvailable = argv.includes("--if-available");
 if (!["proton", "windows", "all"].includes(runtime)) {
-    console.error("Usage: npm run build-watermark -- [--runtime proton|windows|all]");
+    console.error("Usage: npm run build-watermark -- [--runtime proton|windows|all] [--if-available]");
     process.exit(2);
 }
+if (ifAvailable) {
+    if (process.env.SKIP_WATERMARK_BUILD === "1") {
+        console.log("[build-watermark] SKIP_WATERMARK_BUILD=1, skipping.");
+        process.exit(0);
+    }
+    const probe = spawnSync(CLI, ["version"], { stdio: "ignore" });
+    if (probe.error || probe.status !== 0) {
+        const have = ["proton", "windows"].filter((r) => fs.existsSync(path.join(OUT, r)));
+        console.log(`[build-watermark] No running container engine ("${CLI}"), so the forensic watermark components weren't built.`);
+        console.log(have.length
+            ? `[build-watermark] Using the previously built components for: ${have.join(", ")}.`
+            : "[build-watermark] Forensic watermarking won't be available in this deployment. To enable it, start Docker (or Finch) and run deploy-all again.");
+        process.exit(0);
+    }
+}
 checkCli();
-if (runtime === "proton" || runtime === "all") buildProton();
-if (runtime === "windows" || runtime === "all") buildWindows();
+const protonOut = [path.join(OUT, "proton/wmlayer/libVkLayer_wmpoc.so"), path.join(OUT, "proton/xdg/vulkan/implicit_layer.d/VkLayer_wmpoc.json")];
+const windowsOut = [path.join(OUT, "windows/dxgi.dll")];
+if (runtime === "proton" || runtime === "all") {
+    if (ifAvailable && upToDate(protonOut, ["layer", "common", "package"])) console.log("[build-watermark] Proton components are up to date.");
+    else buildProton();
+}
+if (runtime === "windows" || runtime === "all") {
+    if (ifAvailable && upToDate(windowsOut, ["dxgiproxy", "common"])) console.log("[build-watermark] Windows components are up to date.");
+    else buildWindows();
+}
 console.log("\n[build-watermark] done. Next: npm run stage-watermark -- --game s3://<bucket>/<game-folder>/ --runtime <proton|windows> [--exe <path/to/game.exe>]");

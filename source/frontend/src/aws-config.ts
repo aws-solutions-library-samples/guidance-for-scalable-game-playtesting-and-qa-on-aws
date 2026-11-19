@@ -35,4 +35,11 @@ export const awsConfig = {
     },
 };
 
+/**
+ * Runtimes ("PROTON", "WINDOWS") this deployment built forensic watermark components for,
+ * so new games of that runtime can be watermarked. Older generated files lack the field.
+ */
+export const watermarkRuntimes: string[] = String((generated as { watermarkRuntimes?: string }).watermarkRuntimes ?? "none")
+    .split(",").map((r) => r.trim()).filter((r) => r && r !== "none");
+
 export default awsConfig;

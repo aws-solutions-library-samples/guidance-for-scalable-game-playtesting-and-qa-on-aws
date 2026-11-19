@@ -51,7 +51,7 @@ async function main() {
 
     // Single source of truth for where the files go: the same function the backend
     // uses to check a game package before allowing watermarking.
-    const { requiredWatermarkKeys, parseS3Uri } = await import("../lambdas/PlayTestSessions/watermark.js");
+    const { requiredWatermarkKeys, parseS3Uri, COMPONENT_METADATA_KEY, COMPONENT_METADATA_VALUE } = await import("../lambdas/PlayTestSessions/watermark.js");
     const { bucket, prefix } = parseS3Uri(game);
     if (runtime === "WINDOWS") {
         if (!exe) fail("--exe is required for Windows games: the path to the game's .exe inside the game folder.");
@@ -93,7 +93,8 @@ async function main() {
     }
 
     for (const { key, local } of plan) {
-        await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: fs.readFileSync(local) }));
+        // Same marker the backend stamps, so these count as the solution's own files.
+        await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: fs.readFileSync(local), Metadata: { [COMPONENT_METADATA_KEY]: COMPONENT_METADATA_VALUE } }));
         console.log(`[stage-watermark] uploaded s3://${bucket}/${key}`);
     }
     console.log("\n[stage-watermark] done. Now create a playtest session for this game with Add New Game and turn on Forensic watermarking.");

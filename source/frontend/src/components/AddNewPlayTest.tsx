@@ -13,6 +13,7 @@ import TimeInput from "@cloudscape-design/components/time-input";
 
 import { post, get, put } from "aws-amplify/api";
 import { apiErrorMessage } from "./Utility/apiErrorMessage";
+import { watermarkRuntimes } from "../aws-config";
 import S3ResourceSelector from "@cloudscape-design/components/s3-resource-selector";
 import { S3ResourceSelectorProps } from "@cloudscape-design/components/s3-resource-selector";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -309,10 +310,23 @@ fetchBuckets = async (): Promise<Bucket[]> => {
         return {};
     }
 
-    // Watermarking can be turned on unless the game's runtime is known to be unsupported.
-    isWatermarkSupported(): boolean {
+    // Why watermarking can't be turned on for the selected game, or "" if it can.
+    watermarkUnavailableReason(): string {
         const { type } = this.selectedRuntime();
-        return !type || WATERMARK_RUNTIMES.includes(type);
+        if (type && !WATERMARK_RUNTIMES.includes(type)) {
+            return "Not available for the Ubuntu 22.04 runtime. Forensic watermarking supports Proton and Windows games.";
+        }
+        // A new game gets the components added automatically, which needs them to have
+        // been built for this deployment.
+        if (this.state.selectedOption === "add-new" && type && !watermarkRuntimes.includes(type)) {
+            const name = type === "PROTON" ? "Proton" : "Windows";
+            return `This deployment doesn't include the watermark components for ${name} games. Start Docker (or Finch) and run "npm run deploy-all" again to build them.`;
+        }
+        return "";
+    }
+
+    isWatermarkSupported(): boolean {
+        return this.watermarkUnavailableReason() === "";
     }
 
     isWatermarkAlphaValid(): boolean {
@@ -750,10 +764,12 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                         </FormField>
                                         <FormField
                                             label="Forensic watermarking"
-                                            description="Adds a near-invisible watermark to every playtester's stream so leaked footage can be traced with the Watermark Analyzer. The game package must contain the watermark components."
+                                            description={this.state.selectedOption === "select-existing"
+                                                ? "Adds a near-invisible watermark to every playtester's stream so leaked footage can be traced with the Watermark Analyzer. An existing game can only be watermarked if it was originally added with watermarking on."
+                                                : "Adds a near-invisible watermark to every playtester's stream so leaked footage can be traced with the Watermark Analyzer. The watermark components are added to your game folder automatically when you create the playtest."}
                                             constraintText={
                                                 !this.isWatermarkSupported()
-                                                    ? "Not available for the Ubuntu 22.04 runtime. Forensic watermarking supports Proton and Windows games."
+                                                    ? this.watermarkUnavailableReason()
                                                     : this.state.watermarkEnabled && WATERMARK_UNVALIDATED_PROTON_VERSIONS.includes(this.selectedRuntime().version ?? "")
                                                         ? "Warning: watermarking hasn't been validated on Proton 8.0-2c. Test it before relying on it."
                                                         : undefined
@@ -860,7 +876,9 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                             <Box variant="awsui-key-label">Forensic watermarking</Box>
                                             <div>
                                                 {this.state.watermarkEnabled && this.isWatermarkSupported()
-                                                    ? `On (strength ${String(this.state.watermarkAlpha ?? "").trim() || "8"}). The game package will be checked for the watermark components when you create the playtest.`
+                                                    ? `On (strength ${String(this.state.watermarkAlpha ?? "").trim() || "8"}). ${this.state.selectedOption === "add-new"
+                                                        ? "The watermark components will be added to your game folder when you create the playtest."
+                                                        : "The selected game will be checked for the watermark components when you create the playtest."}`
                                                     : "Off"}
                                             </div>
                                         </Box>

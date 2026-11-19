@@ -74,7 +74,7 @@ These deployment instructions work on both Windows and Mac-based operating syste
 - Use the [AWS Cloud Development Kit](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) (AWS CDK).  You can use aws configure via AWS CLI or other mechanisms to authenticate your terminal to use CDK
 - Make sure you have installed [AWS Command Line Interface](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-install.html) (AWS CLI)
 - Make sure you have your [AWS Profile](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-configure.html) set up to point to the correct account and the us-east-2 region
-- (Optional, only if you plan to use forensic watermarking) Install [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch). The watermark host components are compiled inside containers, so no other build tools are needed
+- (Optional, only if you plan to use forensic watermarking) Install [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch), and have it running when you run `deploy-all`. The watermark host components are compiled inside containers, so no other build tools are needed
 
 
 
@@ -168,21 +168,30 @@ The playtester is identified from their signed-in account, not from anything the
 
 **NOTE: Proton 8.0-2c has not been validated. Games that render with Vulkan on the Windows runtime are not currently supported.**
 
-### Step 1: Build the watermark host components
+### Step 1: Have Docker or Finch running when you deploy
 
-The host components are built from source inside containers, so you need [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch) running and network access; no compilers are needed on your machine. No prebuilt binaries are included. From the `source` directory, run:
+The host components are built from source inside containers; no prebuilt binaries are included and no compilers are needed on your machine. **`npm run deploy-all` builds them automatically if [Docker](https://docs.docker.com/get-docker/) or [Finch](https://github.com/runfinch/finch) is running**, and includes them in the deployment. To use Finch instead of Docker, set the environment variable `CONTAINER_CLI=finch` first. The build needs network access.
 
-```npm run build-watermark```
+The first build takes around six minutes, mostly building an image containing the two HLSL shader compilers for Windows games. Later deploys reuse it and skip the build entirely when nothing has changed. If no container engine is running, `deploy-all` prints a notice and deploys without them; watermarking is then unavailable for new games until you start Docker and run `deploy-all` again. To skip the build on purpose, set `SKIP_WATERMARK_BUILD=1`.
 
-This builds both runtimes. To build only one, add `-- --runtime proton` or `-- --runtime windows`. To use Finch instead of Docker, set the environment variable `CONTAINER_CLI=finch` first.
+You can also build them on their own with `npm run build-watermark` (add `-- --runtime proton` or `-- --runtime windows` to build only one). The output is written to `source/watermark/build/`.
 
-The output is written to `source/watermark/build/` (`proton/` and `windows/`). The first Windows build takes around five minutes because it builds an image containing the two HLSL shader compilers; later builds take under a minute.
+### Step 2: Add your game with watermarking on
 
-### Step 2: Add the components to your game package
+There's nothing to copy by hand. When you create a playtest session with **Add New Game** and turn on **Forensic watermarking**, the solution adds the host components to your game's S3 folder before it creates the GameLift Streams application:
 
-Watermarking only works if the host components are part of the game's GameLift Streams application package. Add them to the S3 folder that holds your game **before** you create the playtest session that uses it:
+- For **Proton**, it adds a `wmlayer/` folder and an `xdg/` folder at the root of your game folder.
+- For **Windows**, it adds `dxgi.dll` next to your game's executable (Windows only searches the executable's folder for it).
 
-For a Proton game:
+Nothing else in your game folder is changed. If your game already ships its own `dxgi.dll`, the solution won't overwrite it and tells you the game can't be watermarked.
+
+**NOTE: For Unreal Engine games on Windows, choose the game's shipping executable, for example `LyraStarterGame/Binaries/Win64/LyraGame-Win64-Shipping.exe`, not the small launcher `.exe` at the root of the package. The watermark is only added to the program that actually renders the game, so a launcher would stream without a mark; the solution detects this and tells you which executable to choose.**
+
+**NOTE: GameLift Streams applications cannot be changed after they are created, so a game that was added without watermarking can't have it added later. If you choose *Select Existing Game* with watermarking on, the solution checks that game for the watermark components and stops you with an error if it doesn't have them. To watermark that game, create the playtest session with *Add New Game* and the same game folder instead. A session can never silently run without a mark.**
+
+#### Optional: adding the components by hand
+
+If you add games to GameLift Streams outside this solution (for example in the AWS console) and want them to be watermarkable when you later choose *Select Existing Game*, stage the components into the game's folder **before** creating the application. For a Proton game:
 
 ```npm run stage-watermark -- --game s3://<your-bucket>/<your-game-folder>/ --runtime proton```
 
@@ -190,12 +199,7 @@ For a Windows game, also pass the executable's path inside the game folder (or i
 
 ```npm run stage-watermark -- --game s3://<your-bucket>/<your-game-folder>/ --runtime windows --exe Binaries/Win64/MyGame.exe```
 
-- For **Proton**, this adds a `wmlayer/` folder and an `xdg/` folder to your game folder.
-- For **Windows**, this adds `dxgi.dll` next to the executable you pass with `--exe` (Windows only searches the executable's folder for it). The script checks the executable exists first.
-
-Nothing else in your game folder is changed. The script uses your normal AWS CLI credentials, and it won't overwrite existing watermark files unless you add `--force` (for example after rebuilding them).
-
-**NOTE: GameLift Streams applications cannot be changed after they are created. A game that was added before its folder contained the watermark components cannot be watermarked; choose *Add New Game* again after staging the components. When you enable watermarking, the solution checks the game package and stops you with an error if the components are missing, so a session can never silently run without a mark.**
+It writes the same files as above (it checks a Windows executable exists first). The script uses your normal AWS CLI credentials, and it won't overwrite existing watermark files unless you add `--force`.
 
 ### Before you use watermarking
 
@@ -282,7 +286,7 @@ On step 3 you are setting up your streaming details.  This includes creating a s
 
 ![](assets/Manage_CreateNew4.png)
 
-Also on this step you can turn on *Forensic watermarking* for the playtest session. When it's on, every playtester's stream carries a near-invisible watermark that identifies them, which you can later check with the [Watermark Analyzer](#watermark-analyzer). The toggle is only available for Proton and Windows runtimes, and your game's package must already contain the watermark components (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking)). *Advanced watermark settings* lets you change the mark's strength (1 to 64, default 8); leave it at the default unless testing shows you need a stronger or fainter mark. When you create the playtest, the solution checks the game package; if the watermark components are missing, the playtest isn't created and the error lists exactly which files to add. You can also turn watermarking on or off later when updating a playtest session. The change applies to streams started after you save it.
+Also on this step you can turn on *Forensic watermarking* for the playtest session. When it's on, every playtester's stream carries a near-invisible watermark that identifies them, which you can later check with the [Watermark Analyzer](#watermark-analyzer). The toggle is only available for Proton and Windows runtimes. For a game you're adding with *Add New Game*, the watermark components are added to its folder for you; an existing game can only be watermarked if it was originally added with watermarking on (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking)). *Advanced watermark settings* lets you change the mark's strength (1 to 64, default 8); leave it at the default unless testing shows you need a stronger or fainter mark. If something prevents the components from being added or found, the playtest isn't created and the error explains why. You can also turn watermarking on or off later when updating a playtest session. The change applies to streams started after you save it.
 
 Step 4 we are selecting the start date, start time, and end date of the playtest session.  If playtesters try to playtest outside of this range they will not be able to.  After setting your playtest date range navigate to the next step.
 

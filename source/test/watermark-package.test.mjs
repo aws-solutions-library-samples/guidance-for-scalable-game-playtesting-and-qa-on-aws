@@ -7,6 +7,10 @@ import {
     parseS3Uri,
     requiredWatermarkKeys,
     assertWatermarkPackage,
+    includeWatermarkComponents,
+    assertNotUnrealLauncher,
+    COMPONENT_METADATA_KEY,
+    COMPONENT_METADATA_VALUE,
     WatermarkConfigError,
 } from "../lambdas/PlayTestSessions/watermark.js";
 
@@ -81,7 +85,7 @@ test("package check: lists exactly the missing files, with advice for a new game
             assert.ok(err instanceof WatermarkConfigError);
             assert.match(err.message, /s3:\/\/b\/g\/xdg\/vulkan\/implicit_layer\.d\/VkLayer_wmpoc\.json/);
             assert.doesNotMatch(err.message, /libVkLayer_wmpoc\.so/);
-            assert.match(err.message, /create the playtest session again/);
+            assert.match(err.message, /missing from the game package/);
             return true;
         }
     );
@@ -90,7 +94,94 @@ test("package check: lists exactly the missing files, with advice for a new game
 test("package check: an existing game gets 'add it again' advice", async () => {
     await assert.rejects(
         assertWatermarkPackage({ sourceUri: "s3://b/g/", executablePath: "Game.exe", runtimeType: "WINDOWS", existingApplication: true }, fakeS3(new Set())),
-        /s3:\/\/b\/g\/dxgi\.dll.*Add New Game/s
+        /added without the forensic watermark components.*s3:\/\/b\/g\/dxgi\.dll.*Add New Game.*added for you/s
+    );
+});
+
+// Fake S3 for includeWatermarkComponents: objects map key -> metadata; records copies.
+function fakeGameBucket(objects = {}) {
+    const copies = [];
+    return {
+        copies,
+        s3: {
+            head: async (bucket, key) => {
+                if (`${bucket}/${key}` in objects) return { Metadata: objects[`${bucket}/${key}`] };
+                throw Object.assign(new Error("NotFound"), { name: "NotFound", $metadata: { httpStatusCode: 404 } });
+            },
+            copy: async (sb, sk, db, dk) => { copies.push(`${sb}/${sk} -> ${db}/${dk}`); objects[`${db}/${dk}`] = { [COMPONENT_METADATA_KEY]: COMPONENT_METADATA_VALUE }; },
+        },
+    };
+}
+const avail = { availableRuntimes: ["PROTON", "WINDOWS"], payloadBucket: "payload" };
+
+test("include: a new Proton game gets the layer and manifest at its root", async () => {
+    const f = fakeGameBucket();
+    const added = await includeWatermarkComponents({ sourceUri: "s3://games/lyra", runtimeType: "PROTON", ...avail }, f.s3);
+    assert.deepEqual(f.copies, [
+        "payload/proton/wmlayer/libVkLayer_wmpoc.so -> games/lyra/wmlayer/libVkLayer_wmpoc.so",
+        "payload/proton/xdg/vulkan/implicit_layer.d/VkLayer_wmpoc.json -> games/lyra/xdg/vulkan/implicit_layer.d/VkLayer_wmpoc.json",
+    ]);
+    assert.equal(added.length, 2);
+});
+
+test("include: a new Windows game gets dxgi.dll next to its executable", async () => {
+    const f = fakeGameBucket();
+    await includeWatermarkComponents({ sourceUri: "s3://games/lyra/", executablePath: "Lyra/Binaries/Win64/LyraGame.exe", runtimeType: "WINDOWS", ...avail }, f.s3);
+    assert.deepEqual(f.copies, ["payload/windows/dxgi.dll -> games/lyra/Lyra/Binaries/Win64/dxgi.dll"]);
+});
+
+test("include: replaces an older copy the solution wrote, never a game's own file", async () => {
+    const ours = fakeGameBucket({ "games/g/dxgi.dll": { [COMPONENT_METADATA_KEY]: COMPONENT_METADATA_VALUE } });
+    await includeWatermarkComponents({ sourceUri: "s3://games/g/", executablePath: "Game.exe", runtimeType: "WINDOWS", ...avail }, ours.s3);
+    assert.equal(ours.copies.length, 1);
+
+    const theirs = fakeGameBucket({ "games/g/dxgi.dll": {} });
+    await assert.rejects(
+        includeWatermarkComponents({ sourceUri: "s3://games/g/", executablePath: "Game.exe", runtimeType: "WINDOWS", ...avail }, theirs.s3),
+        /wasn't added by this solution, so it won't be overwritten.*ships its own dxgi\.dll/s
+    );
+    assert.equal(theirs.copies.length, 0);
+});
+
+test("include: refused with a clear fix when this deployment didn't build that runtime", async () => {
+    const f = fakeGameBucket();
+    await assert.rejects(
+        includeWatermarkComponents({ sourceUri: "s3://games/g/", executablePath: "Game.exe", runtimeType: "WINDOWS", availableRuntimes: ["PROTON"], payloadBucket: "payload" }, f.s3),
+        /doesn't include the forensic watermark components for Windows games.*deploy-all/s
+    );
+    await assert.rejects(
+        includeWatermarkComponents({ sourceUri: "s3://games/g/", runtimeType: "UBUNTU", ...avail }, f.s3),
+        /isn't supported on the Ubuntu 22.04 runtime/
+    );
+    assert.equal(f.copies.length, 0);
+});
+
+// The real layout of an Unreal Engine (Lyra) Windows package.
+const lyra = ["lyra/LyraGame.exe", "lyra/Engine/Binaries/Win64/EpicWebHelper.exe",
+    "lyra/LyraStarterGame/Binaries/Win64/LyraGame-Win64-Shipping.exe", "lyra/LyraStarterGame/Binaries/Win64/D3D12/D3D12Core.dll"];
+const lister = (keys) => async (bucket, prefix) => keys.filter((k) => k.startsWith(prefix));
+
+test("unreal launcher: refused, naming the shipping executable to use", async () => {
+    await assert.rejects(
+        assertNotUnrealLauncher({ sourceUri: "s3://games/lyra/", executablePath: "LyraGame.exe", runtimeType: "WINDOWS" }, lister(lyra)),
+        /"LyraGame\.exe" looks like an Unreal Engine launcher.*LyraStarterGame\/Binaries\/Win64\/LyraGame-Win64-Shipping\.exe/s
+    );
+});
+
+test("unreal launcher: the shipping exe, non-Unreal games and Proton are fine", async () => {
+    await assertNotUnrealLauncher({ sourceUri: "s3://games/lyra/", executablePath: "LyraStarterGame/Binaries/Win64/LyraGame-Win64-Shipping.exe", runtimeType: "WINDOWS" }, lister(lyra));
+    await assertNotUnrealLauncher({ sourceUri: "s3://games/other/", executablePath: "Game.exe", runtimeType: "WINDOWS" }, lister(["other/Game.exe", "other/data.pak"]));
+    await assertNotUnrealLauncher({ sourceUri: "s3://games/lyra/", executablePath: "LyraGame.exe", runtimeType: "PROTON" }, lister(lyra));
+    // Engine tools are not the game
+    await assertNotUnrealLauncher({ sourceUri: "s3://games/x/", executablePath: "X.exe", runtimeType: "WINDOWS" }, lister(["x/X.exe", "x/Engine/Binaries/Win64/CrashReportClient-Win64-Shipping.exe"]));
+});
+
+test("include: write access denied is explained", async () => {
+    const f = fakeGameBucket();
+    f.s3.copy = async () => { throw Object.assign(new Error("AccessDenied"), { name: "AccessDenied", $metadata: { httpStatusCode: 403 } }); };
+    await assert.rejects(
+        includeWatermarkComponents({ sourceUri: "s3://games/g/", runtimeType: "PROTON", ...avail }, f.s3),
+        /writing to s3:\/\/games\/ was denied/
     );
 });
 

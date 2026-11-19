@@ -20,6 +20,9 @@ import {RetentionDays} from 'aws-cdk-lib/aws-logs'
 import { NagSuppressions } from "cdk-nag";
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 
@@ -36,6 +39,8 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         // forensic watermarking: seed -> playtester/session binding
         const watermarkSeedTable = this.createWatermarkSeedTable();
+        // forensic watermarking: the host components new games get (built by deploy-all)
+        const watermarkPayload = this.createWatermarkPayload();
 
         //Create StepFunctions
         const steplFunction = this.createStepFunctions(playtestingtable);
@@ -43,7 +48,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         // create an API Gateway with 2 endpoints and 1 stage
         // 1. endpoint allows to start stream sessions
         // 2. endpoint allows to get the available games from the meta data table
-        const stage = this.createRestAPI(userPool, userPoolClient, playtestertable, playtestingtable, steplFunction, watermarkSeedTable);
+        const stage = this.createRestAPI(userPool, userPoolClient, playtestertable, playtestingtable, steplFunction, watermarkSeedTable, watermarkPayload);
         // attach a WAF ACL to the stage with basic rule sets to protect
         // The API
         this.createWebACL(stage);
@@ -481,6 +486,48 @@ export class PlaytestingApiStack extends cdk.Stack {
         }
     }
 
+    // Forensic watermarking: a private bucket holding the host components that are copied
+    // into a game's folder when an admin adds a new game with watermarking on. Filled from
+    // source/watermark/build/, which deploy-all builds when Docker or Finch is running; a
+    // runtime is only offered if its components were built.
+    private createWatermarkPayload() {
+        const buildDir = path.join(process.cwd(), 'watermark', 'build');
+        const runtimes: string[] = [];
+        if (fs.existsSync(path.join(buildDir, 'proton/wmlayer/libVkLayer_wmpoc.so'))
+            && fs.existsSync(path.join(buildDir, 'proton/xdg/vulkan/implicit_layer.d/VkLayer_wmpoc.json'))) {
+            runtimes.push('PROTON');
+        }
+        if (fs.existsSync(path.join(buildDir, 'windows/dxgi.dll'))) {
+            runtimes.push('WINDOWS');
+        }
+
+        const bucket = new s3.Bucket(this, 'WatermarkPayloadBucket', {
+            blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+            encryption: s3.BucketEncryption.S3_MANAGED,
+            enforceSSL: true,
+            removalPolicy: RemovalPolicy.DESTROY,
+            autoDeleteObjects: true,
+        });
+        if (runtimes.length) {
+            new s3deploy.BucketDeployment(this, 'WatermarkPayloadDeployment', {
+                sources: [s3deploy.Source.asset(buildDir)],
+                destinationBucket: bucket,
+            });
+            // The upload is done by a CDK-managed singleton Lambda (same as the frontend stack's).
+            NagSuppressions.addResourceSuppressionsByPath(this, `/${this.stackName}/Custom::CDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C`, [
+                { id: 'AwsSolutions-IAM4', reason: 'CDK BucketDeployment provider uses the AWS managed basic execution policy.' },
+                { id: 'AwsSolutions-IAM5', reason: 'CDK BucketDeployment needs object-level access to the CDK asset bucket and this payload bucket.' },
+                { id: 'AwsSolutions-L1', reason: 'The BucketDeployment provider runtime is managed by CDK.' },
+            ], true);
+        }
+        NagSuppressions.addResourceSuppressions(bucket, [
+            { id: 'AwsSolutions-S1', reason: 'Holds only the solution\'s own build artifacts, written by CloudFormation; access logging is not needed.' }
+        ]);
+
+        new CfnOutput(this, "WatermarkRuntimes", { value: runtimes.join(",") || "none" });
+        return { bucket, runtimes };
+    }
+
     // Forensic watermarking identity store: one item per watermarked stream start, mapping
     // the per-stream seed to the playtester and playtest session it was issued to. Items
     // are kept when a playtest session is deleted (they carry snapshots of its name), so a
@@ -612,7 +659,7 @@ export class PlaytestingApiStack extends cdk.Stack {
         return { userPool, userPoolClient };
     }
 
-    private createRestAPI(userPool: cognito.UserPool, userPoolClient: cognito.UserPoolClient, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine, watermarkSeedTable: ddb.Table) {
+    private createRestAPI(userPool: cognito.UserPool, userPoolClient: cognito.UserPoolClient, playtestertable: ddb.Table, playtestsessiontable: ddb.Table, stepFunction: sfn.StateMachine, watermarkSeedTable: ddb.Table, watermarkPayload: { bucket: s3.Bucket, runtimes: string[] }) {
         // Group-based authorization is enforced by a custom Lambda (REQUEST) authorizer.
         // The native Cognito authorizer only validates that a caller is signed in; it ignores
         // the user's Cognito group, which previously let any authenticated playtester call
@@ -1082,13 +1129,29 @@ export class PlaytestingApiStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_24_X,
             handler: 'PlayTestSessions.handler',
             code: lambda.Code.fromAsset('lambdas/PlayTestSessions'),
-            timeout: Duration.seconds(10), // Lower timeout to prevent resource exhaustion
+            timeout: Duration.seconds(20), // allows copying the watermark components into a new game's folder
             environment: {
                 "PLAYTESTSESSION_TABLE": playtestsessiontable.tableName,
-                "STEP_FUNCTION_ARN":  stepFunction.stateMachineArn
+                "STEP_FUNCTION_ARN":  stepFunction.stateMachineArn,
+                "WATERMARK_PAYLOAD_BUCKET": watermarkPayload.bucket.bucketName,
+                "WATERMARK_RUNTIMES": watermarkPayload.runtimes.join(",")
             },
             logGroup: lambdaLogGroup
         });
+
+        // Forensic watermarking: copy the host components into a NEW game's S3 folder
+        // (Add New Game) before its GameLift Streams application is created. Writes are
+        // limited to those exact file names, in whichever bucket holds the game.
+        watermarkPayload.bucket.grantRead(playtestSessionLambda);
+        playtestSessionLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["s3:PutObject"],
+            resources: [
+                "arn:aws:s3:::*/*wmlayer/libVkLayer_wmpoc.so",
+                "arn:aws:s3:::*/*xdg/vulkan/implicit_layer.d/VkLayer_wmpoc.json",
+                "arn:aws:s3:::*/*dxgi.dll",
+            ]
+        }));
 
         //grant start execution rights to lambda
         stepFunction.grantStartExecution(playtestSessionLambda)

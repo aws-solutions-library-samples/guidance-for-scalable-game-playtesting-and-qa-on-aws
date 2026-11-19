@@ -2,9 +2,12 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { GameLiftStreamsClient, CreateApplicationCommand, DeleteStreamGroupCommand, GetApplicationCommand } from '@aws-sdk/client-gameliftstreams';
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
-import { S3Client, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadObjectCommand, CopyObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from 'uuid'; // Use UUID if you want to generate unique IDs
-import { normalizeWatermarkSettings, assertWatermarkPackage } from './watermark.js';
+import {
+    normalizeWatermarkSettings, assertWatermarkPackage, includeWatermarkComponents, assertNotUnrealLauncher,
+    COMPONENT_METADATA_KEY, COMPONENT_METADATA_VALUE,
+} from './watermark.js';
 
 const dynamo = DynamoDBDocument.from(new DynamoDB());
 const client = new GameLiftStreamsClient();
@@ -14,18 +17,46 @@ const s3 = new S3Client({ followRegionRedirects: true });
 
 const headObject = (bucket, key) => s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
 
+// Object keys in a game package (bounded, so a huge package can't stall the request).
+async function listKeys(bucket, prefix) {
+    const keys = [];
+    let ContinuationToken;
+    for (let page = 0; page < 20; page++) {
+        const out = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken }));
+        keys.push(...(out.Contents ?? []).map((o) => o.Key));
+        if (!out.IsTruncated) break;
+        ContinuationToken = out.NextContinuationToken;
+    }
+    return keys;
+}
+
+// Runtimes this deployment built watermark components for (set by the stack).
+const WATERMARK_PAYLOAD_RUNTIMES = String(process.env.WATERMARK_RUNTIMES ?? "").split(",").filter(Boolean);
+const payloadS3 = {
+    head: headObject,
+    copy: (srcBucket, srcKey, dstBucket, dstKey) => s3.send(new CopyObjectCommand({
+        Bucket: dstBucket,
+        Key: dstKey,
+        CopySource: `${srcBucket}/${srcKey.split("/").map(encodeURIComponent).join("/")}`,
+        MetadataDirective: "REPLACE",
+        Metadata: { [COMPONENT_METADATA_KEY]: COMPONENT_METADATA_VALUE },
+    })),
+};
+
 // Check that an existing GameLift Streams application's package can be watermarked.
 async function assertExistingAppWatermarkable(applicationId) {
     if (!applicationId) {
         throw new Error("Couldn't determine the playtest session's game to check it for the watermark components.");
     }
     const app = await client.send(new GetApplicationCommand({ Identifier: applicationId }));
-    await assertWatermarkPackage({
+    const pkg = {
         sourceUri: app.ApplicationSourceUri,
         executablePath: app.ExecutablePath,
         runtimeType: app.RuntimeEnvironment?.Type,
         existingApplication: true,
-    }, headObject);
+    };
+    await assertWatermarkPackage(pkg, headObject);
+    await assertNotUnrealLauncher(pkg, listKeys);
 }
 
 /**
@@ -186,12 +217,21 @@ export const handler = async (event) => {
                         } catch {
                             throw new Error("The game's runtime environment is missing or invalid.");
                         }
-                        await assertWatermarkPackage({
+                        const pkg = {
                             sourceUri: newSession.s3Path,
                             executablePath: String(newSession.executionS3Path ?? "").replace(newSession.s3Path, ''),
                             runtimeType,
                             existingApplication: false,
-                        }, headObject);
+                        };
+                        // Add the components to the game folder, then confirm they're there.
+                        await assertNotUnrealLauncher(pkg, listKeys);
+                        const added = await includeWatermarkComponents({
+                            ...pkg,
+                            availableRuntimes: WATERMARK_PAYLOAD_RUNTIMES,
+                            payloadBucket: process.env.WATERMARK_PAYLOAD_BUCKET,
+                        }, payloadS3);
+                        console.log("Added the watermark components to the game package:", added.join(", "));
+                        await assertWatermarkPackage(pkg, headObject);
                     } else {
                         await assertExistingAppWatermarkable(newSession.applicationSelected);
                     }
