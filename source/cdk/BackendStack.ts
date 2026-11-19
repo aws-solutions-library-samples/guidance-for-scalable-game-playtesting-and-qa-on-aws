@@ -19,6 +19,7 @@ import * as log from 'aws-cdk-lib/aws-logs'
 import {RetentionDays} from 'aws-cdk-lib/aws-logs'
 import { NagSuppressions } from "cdk-nag";
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 
@@ -327,6 +328,157 @@ export class PlaytestingApiStack extends cdk.Stack {
 
         //return
         return stepFunction;
+    }
+
+    // Forensic watermarking: the verifier (Python + numpy), evidence bucket and table, and
+    // the admin-only /watermark routes. The routes are deliberately NOT in the
+    // authorizer's playtester allow-list, so only Admins can call them.
+    private createWatermarkAnalyzer(api: apigateway.RestApi, auth: apigateway.IAuthorizer, lambdaLogGroup: log.ILogGroup, seedTable: ddb.Table) {
+        // numpy comes from the AWS-managed "AWS SDK for pandas" Lambda layer, so deploying
+        // needs no Docker. The layer is published by AWS (not this account) in every
+        // GameLift Streams region; the verifier is pinned to the Python version it was
+        // tested on. To support another region, add its layer ARN from
+        // https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html
+        const numpyLayerVersion = "17";
+        const numpyLayerAccount = "336392948345"; // AWS-owned layer publisher account
+        const numpyLayerMap = new cdk.CfnMapping(this, 'WatermarkNumpyLayer', {
+            mapping: Object.fromEntries(
+                ["us-east-1", "us-east-2", "us-west-2", "ap-northeast-1", "eu-central-1", "eu-west-1"].map((r) => [
+                    r, { arn: `arn:aws:lambda:${r}:${numpyLayerAccount}:layer:AWSSDKPandas-Python313:${numpyLayerVersion}` }
+                ])
+            )
+        });
+        const numpyLayer = lambda.LayerVersion.fromLayerVersionArn(this, 'WatermarkNumpyLayerVersion',
+            numpyLayerMap.findInMap(cdk.Aws.REGION, 'arn'));
+
+        // ---- evidence storage ----
+        const evidenceBucket = new s3.Bucket(this, 'WatermarkEvidenceBucket', {
+            blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+            encryption: s3.BucketEncryption.S3_MANAGED,
+            enforceSSL: true,
+            versioned: false,
+            removalPolicy: RemovalPolicy.DESTROY,
+            autoDeleteObjects: true,
+            lifecycleRules: [
+                // brightness planes are intermediates; evidence/ is kept until an admin deletes it
+                { id: 'expire-work', prefix: 'work/', expiration: Duration.days(1) },
+                { id: 'abort-incomplete-uploads', abortIncompleteMultipartUploadAfter: Duration.days(1) },
+            ],
+            // Browsers upload with presigned POSTs and display with presigned GETs. The
+            // signature is what authorizes each request; CORS only lets the browser read
+            // the response. The frontend's CloudFront domain is created after this stack.
+            cors: [{
+                allowedMethods: [s3.HttpMethods.POST, s3.HttpMethods.GET],
+                allowedOrigins: ['*'],
+                allowedHeaders: ['*'],
+                maxAge: 3000,
+            }],
+        });
+
+        const evidenceTable = new ddb.Table(this, "watermarkevidence", {
+            partitionKey: { name: "evidenceId", type: AttributeType.STRING },
+            billingMode: BillingMode.PAY_PER_REQUEST,
+            encryption: ddb.TableEncryption.AWS_MANAGED,
+            pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+            removalPolicy: RemovalPolicy.DESTROY
+        });
+
+        // ---- verifier ----
+        const verifierCode = lambda.Code.fromAsset('lambdas/PlayTestVerifyWatermark');
+
+        // Scale-search worker: the verifier fans out to this when a capture is off the
+        // embed grid. It only ever receives a small image patch and candidate seeds.
+        const searchWorker = new lambda.Function(this, 'PlayTestWatermarkScaleSearch', {
+            runtime: lambda.Runtime.PYTHON_3_13,
+            architecture: lambda.Architecture.X86_64,
+            handler: 'handler.search_worker',
+            code: verifierCode,
+            layers: [numpyLayer],
+            timeout: Duration.seconds(30),
+            memorySize: 2048, // benchmarked knee for this single-threaded numpy FFT work
+            logGroup: lambdaLogGroup
+        });
+
+        const verifier = new lambda.Function(this, 'PlayTestVerifyWatermark', {
+            runtime: lambda.Runtime.PYTHON_3_13,
+            architecture: lambda.Architecture.X86_64,
+            handler: 'handler.handler',
+            code: verifierCode,
+            layers: [numpyLayer],
+            timeout: Duration.seconds(60),
+            memorySize: 2048,
+            environment: {
+                "WM_TABLE": seedTable.tableName,
+                "WM_SEARCH_FN": searchWorker.functionName,
+                "WM_SEARCH_WORKERS": "16"
+            },
+            logGroup: lambdaLogGroup
+        });
+        seedTable.grantReadData(verifier);
+        searchWorker.grantInvoke(verifier);
+        verifier.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["s3:GetObject"],
+            resources: [evidenceBucket.arnForObjects('work/*')]
+        }));
+
+        // ---- evidence API ----
+        const evidenceLambda = new lambda.Function(this, 'PlayTestWatermarkEvidence', {
+            runtime: lambda.Runtime.NODEJS_24_X,
+            handler: 'PlayTestWatermarkEvidence.handler',
+            code: lambda.Code.fromAsset('lambdas/PlayTestWatermarkEvidence'),
+            timeout: Duration.seconds(28), // API Gateway allows 29s
+            memorySize: 512,
+            environment: {
+                "EVIDENCE_BUCKET": evidenceBucket.bucketName,
+                "EVIDENCE_TABLE": evidenceTable.tableName,
+                "WATERMARK_SEED_TABLE": seedTable.tableName,
+                "VERIFY_FUNCTION": verifier.functionName
+            },
+            logGroup: lambdaLogGroup
+        });
+        evidenceBucket.grantReadWrite(evidenceLambda);
+        evidenceBucket.grantDelete(evidenceLambda);
+        evidenceTable.grantReadWriteData(evidenceLambda);
+        evidenceLambda.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["dynamodb:Scan"],
+            resources: [seedTable.tableArn]
+        }));
+        verifier.grantInvoke(evidenceLambda);
+
+        const integration = new apigateway.LambdaIntegration(evidenceLambda);
+        const methodOptions = { authorizer: auth, authorizationType: apigateway.AuthorizationType.CUSTOM };
+        const watermark = api.root.addResource("watermark");
+        watermark.addResource("sessions").addMethod('GET', integration, methodOptions);
+        const evidence = watermark.addResource("evidence");
+        evidence.addMethod('GET', integration, methodOptions);
+        evidence.addMethod('POST', integration, methodOptions);
+        const evidenceItem = evidence.addResource("{evidenceId}");
+        evidenceItem.addMethod('GET', integration, methodOptions);
+        evidenceItem.addMethod('DELETE', integration, methodOptions);
+        evidenceItem.addResource("analyze").addMethod('POST', integration, methodOptions);
+
+        new CfnOutput(this, "WatermarkEvidenceBucketName", { value: evidenceBucket.bucketName });
+
+        // ---- cdk-nag ----
+        NagSuppressions.addResourceSuppressions(evidenceBucket, [
+            { id: 'AwsSolutions-S1', reason: 'Server access logging is not required for this sample. Each evidence record stores the uploading admin, time and a SHA-256 of the file.' }
+        ]);
+        NagSuppressions.addResourceSuppressions(evidenceTable, [
+            { id: 'AwsSolutions-DDB3', reason: 'Point-in-time recovery is enabled.' }
+        ]);
+        for (const fn of [verifier, searchWorker]) {
+            NagSuppressions.addResourceSuppressions(fn, [
+                { id: 'AwsSolutions-L1', reason: 'Pinned to Python 3.13: the verifier uses numpy from the AWS SDK for pandas layer for that version, and its numerics are validated against it.' }
+            ]);
+        }
+        for (const fn of [verifier, searchWorker, evidenceLambda]) {
+            NagSuppressions.addResourceSuppressions(fn.role!, [
+                { id: 'AwsSolutions-IAM4', reason: 'Uses the AWS managed policy for basic Lambda execution.' },
+                { id: 'AwsSolutions-IAM5', reason: 'Wildcards are scoped to this stack\'s evidence bucket objects, the seed table\'s indexes, and the verifier/worker function versions.' }
+            ], true);
+        }
     }
 
     // Forensic watermarking identity store: one item per watermarked stream start, mapping
@@ -1084,7 +1236,18 @@ export class PlaytestingApiStack extends cdk.Stack {
 
 
 
+        // forensic watermarking: verifier, evidence storage and the admin analyzer routes
+        this.createWatermarkAnalyzer(api, auth, lambdaLogGroup, watermarkSeedTable);
+
         const deployment = new apigateway.Deployment(this, 'apigw-deployment', {api})
+        // A manually created deployment keeps the same logical id forever, so CloudFormation
+        // would never republish the stage when routes are added or changed (they only went
+        // live on a fresh deploy). Folding the route table into the id makes any route
+        // change create a new deployment. Must run after every addMethod call above.
+        deployment.addToLogicalId(api.methods.map((m) => {
+            const cfn = m.node.defaultChild as apigateway.CfnMethod;
+            return `${m.httpMethod} ${m.resource.path} auth=${cfn.authorizationType} key=${cfn.apiKeyRequired ?? false}`;
+        }).sort());
 
         // enable logging for the stage
         const devLogGroup = new log.LogGroup(this, "DevLogs", {
