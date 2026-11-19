@@ -68,6 +68,23 @@ test("sessionAlpha: stored strength, falling back to 8", () => {
     assert.equal(sw.sessionAlpha({ watermarkAlpha: "abc" }), 8);
 });
 
+test("sessionUnavailableReason: enabled and inside the date window (inclusive, UTC)", () => {
+    const now = new Date("2026-11-20T23:30:00Z");
+    const s = { enabled: true, startDate: "2026-11-20", endDate: "2026-11-22" };
+    assert.equal(sw.sessionUnavailableReason(s, now), null);                                         // first day
+    assert.equal(sw.sessionUnavailableReason({ ...s, startDate: "2026-11-18", endDate: "2026-11-20" }, now), null); // last day
+    assert.match(sw.sessionUnavailableReason({ ...s, enabled: false }, now), /disabled/);
+    assert.match(sw.sessionUnavailableReason({ ...s, startDate: "2026-11-21" }, now), /hasn't started/);
+    assert.match(sw.sessionUnavailableReason({ ...s, endDate: "2026-11-19" }, now), /has ended/);
+    assert.match(sw.sessionUnavailableReason({}, now), /disabled/);
+});
+
+test("bot session list only offers ACTIVE sessions", () => {
+    const code = src("../lambdas/PlayTestGetPlayTestSessions/PlayTestGetPlayTestSessions.js");
+    assert.match(code, /#status = :active/);
+    assert.match(code, /":active": "ACTIVE"/);
+});
+
 test("ownsSession: only the user who started a session may see it", () => {
     const mine = sw.opaqueUserId("playtester_one");
     assert.equal(getStream.ownsSession(mine, "playtester_one"), true);

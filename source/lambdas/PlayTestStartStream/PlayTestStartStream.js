@@ -7,6 +7,7 @@ const {
     newWatermarkSeed,
     watermarkEnvironment,
     sessionAlpha,
+    sessionUnavailableReason,
 } = require('./streamWatermark');
 
 const gameLiftStreams = new GameLiftStreams({
@@ -72,6 +73,13 @@ exports.handler = async function (event, context) {
         }))).Item;
         if (!session) {
             return respond(404, { message: "This playtest session doesn't exist." });
+        }
+
+        // Enforce the session's availability here, not only in the browser. Admins are
+        // exempt so a studio can test its build before or after the playtest window.
+        if (!isAdmin) {
+            const unavailable = sessionUnavailableReason(session, new Date());
+            if (unavailable) return respond(403, { message: unavailable });
         }
 
         // Only the playtester a registration belongs to may stream with it.

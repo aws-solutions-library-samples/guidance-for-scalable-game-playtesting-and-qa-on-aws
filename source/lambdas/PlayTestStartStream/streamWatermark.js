@@ -60,6 +60,19 @@ function watermarkEnvironment(runtimeType, alpha, seed) {
     return env;
 }
 
+/**
+ * Why a playtester can't stream this session right now, or null if they can. Same rules
+ * as PlayTesterValidation/PlayerValidate.js (enabled, and today's UTC date within
+ * startDate..endDate inclusive), enforced server-side at stream start.
+ */
+function sessionUnavailableReason(session, now) {
+    if (!session?.enabled) return "This playtest session is disabled.";
+    const today = now.toISOString().split("T")[0];
+    if (session.startDate && today < session.startDate) return "This playtest session hasn't started yet.";
+    if (session.endDate && today > session.endDate) return "This playtest session has ended.";
+    return null;
+}
+
 /** Watermark strength stored on the session, falling back to the default of 8. */
 function sessionAlpha(session) {
     const n = Number(session?.watermarkAlpha);
@@ -72,5 +85,6 @@ module.exports = {
     newWatermarkSeed,
     watermarkEnvironment,
     sessionAlpha,
+    sessionUnavailableReason,
     PROTON_PACKAGE_DIR,
 };
