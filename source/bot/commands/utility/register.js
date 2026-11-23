@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags, StringSelectMenuBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { apiBaseUrl, apiKey } = require('../../config.json');
+const { apiBaseUrl, apiKey } = require('../../config');
 
 // Suppress deprecation warning
 process.removeAllListeners('warning');
