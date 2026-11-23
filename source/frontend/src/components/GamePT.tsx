@@ -14,10 +14,16 @@ import {
     Container,
     CopyToClipboard,
     Header,
-    SpaceBetween
+    KeyValuePairs,
+    Modal,
+    SpaceBetween,
+    Alert,
+    Box
 } from "@cloudscape-design/components";
 
 import * as gameliftstreamssdk from '../gl-streamsSDK/gameliftstreams-1.0.0';
+import {isTextEntryElement} from '../utils/streamInput';
+import {StatRow, statsToText, summarizeRtcStats} from '../utils/rtcStats';
 
 import {ApiError, post, get} from 'aws-amplify/api';
 import {fetchAuthSession} from "aws-amplify/auth";
@@ -45,11 +51,32 @@ interface GameState {
     error: string,
     micro: boolean,
     arn: string,
-    regions: string[]
+    regions: string[],
+    // Stream input is temporarily detached because a text field (e.g. a testing-outcome
+    // answer) has focus. It is re-attached when focus leaves the text field.
+    inputPausedForTyping: boolean,
+    statsVisible: boolean,
+    statsLoading: boolean,
+    statsRows: StatRow[],
+    statsError: string
 }
+
+// How long to wait between the two stats samples used to measure bitrate.
+const STATS_SAMPLE_MS = 1000;
+
+// Input options shared by every GameLiftStreams instance this component creates.
+const INPUT_CONFIGURATION = {
+    setCursor: 'visibility' as const,
+    autoPointerLock: 'fullscreen' as const,
+    // Belt and braces for typing in a text field: never forward a key event aimed at one.
+    keyboardFilter: (event: KeyboardEvent) => !isTextEntryElement(event.target)
+};
 
 class GamePT extends React.Component<GameProps, GameState> {
     gameliftstreams?: gameliftstreamssdk.GameLiftStreams;
+    // Mirrors state.inputPausedForTyping synchronously, because focusout/focusin pairs fire
+    // back to back, before React has applied a setState.
+    private inputPaused = false;
 
     constructor(props: GameProps) {
         super(props);
@@ -60,7 +87,12 @@ class GamePT extends React.Component<GameProps, GameState> {
             micro: false,
             arn: "",
             regions: [props.region],
-            inputEnabled: false
+            inputEnabled: false,
+            inputPausedForTyping: false,
+            statsVisible: false,
+            statsLoading: false,
+            statsRows: [],
+            statsError: ""
         };
         
         //gamecastsdk.setLogLevel('debug');
@@ -71,6 +103,9 @@ class GamePT extends React.Component<GameProps, GameState> {
         this.enablePointerLock = this.enablePointerLock.bind(this);
         this.enableMic = this.enableMic.bind(this);
         this.onButtonDropdownItemClick = this.onButtonDropdownItemClick.bind(this);
+        this.onFocusIn = this.onFocusIn.bind(this);
+        this.onFocusOut = this.onFocusOut.bind(this);
+        this.showStats = this.showStats.bind(this);
     }
 
     componentDidUpdate(prevProps: GameProps) {
@@ -103,10 +138,7 @@ class GamePT extends React.Component<GameProps, GameState> {
         this.gameliftstreams = new gameliftstreamssdk.GameLiftStreams({
             videoElement: element,
             audioElement: this.getAudioElement(),
-            inputConfiguration: {
-                setCursor: 'visibility',
-                autoPointerLock: 'fullscreen'
-            },
+            inputConfiguration: INPUT_CONFIGURATION,
             clientConnection: {
                 /*
                 connectionState: this.streamConnectionStateCallback,
@@ -115,6 +147,34 @@ class GamePT extends React.Component<GameProps, GameState> {
                 */
             }
         });
+        document.addEventListener('focusin', this.onFocusIn);
+        document.addEventListener('focusout', this.onFocusOut);
+    }
+
+    componentWillUnmount() {
+        document.removeEventListener('focusin', this.onFocusIn);
+        document.removeEventListener('focusout', this.onFocusOut);
+    }
+
+    // A text field on the page got focus while the game has the keyboard: hand the
+    // keyboard to the page until the playtester leaves the field (issue #40).
+    onFocusIn(event: FocusEvent) {
+        if (this.inputPaused || !isTextEntryElement(event.target)) return;
+        if (this.state.status !== StreamState.RUNNING || !this.state.inputEnabled) return;
+        this.gameliftstreams?.detachInput();
+        this.inputPaused = true;
+        this.setState({inputPausedForTyping: true});
+    }
+
+    // Focus left the text field. Moving straight to another text field keeps input paused;
+    // anything else (clicking the stream, another control) gives the keyboard back to the game.
+    onFocusOut(event: FocusEvent) {
+        if (!this.inputPaused || isTextEntryElement(event.relatedTarget)) return;
+        this.inputPaused = false;
+        this.setState({inputPausedForTyping: false});
+        if (this.state.status === StreamState.RUNNING && this.state.inputEnabled) {
+            this.gameliftstreams?.attachInput();
+        }
     }
 
     async createStreamSession() {
@@ -179,6 +239,7 @@ class GamePT extends React.Component<GameProps, GameState> {
                     this.setState((prevState) => ({
                         ...prevState,
                         status: StreamState.RUNNING,
+                        inputEnabled: true,
                         arn: arn
                     }));
                     return; // session is started, state is set for it so we can return
@@ -212,6 +273,8 @@ class GamePT extends React.Component<GameProps, GameState> {
     enableFullScreen() {
         const element = this.getVideoElement()
         if (element) {
+            this.inputPaused = false;
+            this.setState({inputPausedForTyping: false});
             this.gameliftstreams?.attachInput()
             this.setState({inputEnabled: true})
             element.requestFullscreen();
@@ -228,17 +291,42 @@ class GamePT extends React.Component<GameProps, GameState> {
     }
 
     closeConnection() {
-        this.setState({status: StreamState.STOPPED, micro: false, arn: "", inputEnabled: false});
+        this.inputPaused = false;
+        this.setState({status: StreamState.STOPPED, micro: false, arn: "", inputEnabled: false,
+            inputPausedForTyping: false, statsVisible: false});
         this.gameliftstreams?.close();
         const element = this.getVideoElement();
         this.gameliftstreams = new gameliftstreamssdk.GameLiftStreams({
             videoElement: element,
             audioElement: this.getAudioElement(),
-            inputConfiguration: {
-                setCursor: 'visibility',
-                autoPointerLock: 'fullscreen'
-            }
+            inputConfiguration: INPUT_CONFIGURATION
         })
+    }
+
+    // Show a snapshot of the stream's connection quality (issue #42). Two video samples
+    // STATS_SAMPLE_MS apart are taken so the bitrate can be measured.
+    async showStats() {
+        this.setState({statsVisible: true, statsLoading: true, statsError: ""});
+        try {
+            const sdk = this.gameliftstreams;
+            if (!sdk) throw new Error("The stream is not connected.");
+            const first = await sdk.getVideoRTCStats();
+            await new Promise(resolve => setTimeout(resolve, STATS_SAMPLE_MS));
+            const [video, audio] = await Promise.all([
+                sdk.getVideoRTCStats(),
+                sdk.getAudioRTCStats().catch(() => null)
+            ]);
+            const rows = summarizeRtcStats(video, audio, first);
+            this.setState({
+                statsRows: rows,
+                statsError: rows.length ? "" : "The browser did not report any statistics for this stream."
+            });
+        } catch (e) {
+            console.error(e);
+            this.setState({statsRows: [], statsError: `Could not read stream statistics: ${e instanceof Error ? e.message : String(e)}`});
+        } finally {
+            this.setState({statsLoading: false});
+        }
     }
 
     onButtonDropdownItemClick(details: CustomEvent<ButtonDropdownProps.ItemClickDetails>) {
@@ -252,10 +340,15 @@ class GamePT extends React.Component<GameProps, GameState> {
             case "micro":
                 this.enableMic();
                 break;
+            case "stats":
+                this.showStats();
+                break;
         }
     }
 
     enableInput() {
+        this.inputPaused = false;
+        this.setState({inputPausedForTyping: false});
         if (!this.state.inputEnabled) {
             this.gameliftstreams?.attachInput();
             this.setState({inputEnabled: true})
@@ -314,6 +407,31 @@ class GamePT extends React.Component<GameProps, GameState> {
         ];
     };
 
+    private renderStatsModal() {
+        const {statsVisible, statsLoading, statsRows, statsError} = this.state;
+        return <Modal
+            visible={statsVisible}
+            onDismiss={() => this.setState({statsVisible: false})}
+            header="Stream statistics"
+            footer={
+                <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                        {statsRows.length ?
+                            <CopyToClipboard copyButtonText="Copy" copySuccessText="Statistics copied"
+                                             copyErrorText="Statistics failed to copy"
+                                             textToCopy={statsToText(statsRows)}/> : null}
+                        <Button onClick={this.showStats} loading={statsLoading}
+                                disabled={this.state.status !== StreamState.RUNNING}>Refresh</Button>
+                        <Button variant="primary" onClick={() => this.setState({statsVisible: false})}>Close</Button>
+                    </SpaceBetween>
+                </Box>
+            }>
+            {statsLoading && !statsRows.length ? <Box>Measuring the stream for about a second...</Box> :
+                statsError ? <Alert type="error">{statsError}</Alert> :
+                    <KeyValuePairs columns={2} items={statsRows.map(r => ({label: r.label, value: r.value}))}/>}
+        </Modal>;
+    }
+
     render() {
         return <Container
             disableContentPaddings={true}
@@ -350,8 +468,11 @@ class GamePT extends React.Component<GameProps, GameState> {
                                          copyErrorText={"Region failed to copy"}
                                          textToCopy={this.state.regions[0]} variant="inline"/>
                     </Badge>
+                    {this.state.inputPausedForTyping ?
+                        <Badge color="blue">Game input paused while typing</Badge> : null}
                 </SpaceBetween> : null
             }>
+            {this.renderStatsModal()}
 
             <div style={{position: 'relative'}}>
                 <video

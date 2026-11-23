@@ -486,13 +486,20 @@ Then moments later you should see your game begin to stream like the image below
 
 ![](assets/Playtesting3.png)
 
-Now, lets look at the bottom of the page where the testing outcomes are located.  Look at the bottom right of the screen you should see an up arrow.  Click that to expand upwards the testing outcomes that the studio wishes for you to observe and record your observations.  Notice though, as you're streaming you will not be able to type in here until you've disabled the input.  Once you've disabled the input you can start recording your observations.  We have to disable the input otherwise the browser will still be trying to send keyboard commands to your game session.
+Now, lets look at the bottom of the page where the testing outcomes are located.  Look at the bottom right of the screen you should see an up arrow.  Click that to expand upwards the testing outcomes that the studio wishes for you to observe and record your observations.  You can type your observations while the game is streaming: when you click into a testing outcome field, the page stops sending your keyboard to the game and shows a *Game input paused while typing* badge below the stream. Click back on the game to give it the keyboard again.
 
 **NOTE: However way you decided to record your observations don't forget to find the *Submit Observations* button located below all the testing outcomes.**
 
 ![](assets/Playtesting4.png)
 
-Use the options drop down to disable the input in order to edit the Testing outcome fields
+The *Options* drop down has these items:
+
+| Option | What it does |
+| --- | --- |
+| Enable / Disable Pointer Lock | Locks the mouse pointer to the stream (useful for games that use the mouse to look around). Press Esc to release it. |
+| Enable / Disable Input | Turns sending your keyboard and mouse to the game on or off. Input is on when the stream starts. |
+| Enable Microphone | Sends your microphone to the game. Choose it before starting the stream. |
+| Get RTC Statistics | Measures the stream for about a second and shows its resolution, frame rate, bitrate, codec, packet loss, jitter, dropped frames and round-trip time. Figures your browser doesn't report are left out. Use *Copy* to paste them into an observation or a bug report. |
 
 ![](assets/Playtesting7.png)
 
