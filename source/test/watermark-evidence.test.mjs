@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
     validateCreateRequest, validateSessionFilter, summarizeResult, groupSessions,
-    sanitizeFileName, isEvidenceId, originalKey, lumaKey, reportKey, RequestError,
+    sanitizeFileName, isEvidenceId, originalKey, lumaKey, reportKey, RequestError, trimTrailingSlashes,
 } from "../lambdas/PlayTestWatermarkEvidence/evidenceLogic.js";
 
 const ok = { contentType: "image/png", fileSize: 1000, width: 1920, height: 1080, fileName: "leak.png" };
@@ -28,6 +28,17 @@ test("create: rejects other types, oversize files and tiny or huge images", () =
 
 test("create: the too-small message explains the 256 px minimum", () => {
     assert.throws(() => validateCreateRequest({ ...ok, width: 200 }), /at least 256 x 256 pixels/);
+});
+
+test("trimTrailingSlashes: same as the regex it replaced, and linear on hostile input", () => {
+    for (const p of ["", "/", "///", "/watermark/evidence", "/watermark/evidence/", "/watermark/evidence///", "/a//b/", undefined, null]) {
+        assert.equal(trimTrailingSlashes(p), String(p ?? "").replace(/\/+$/, ""), JSON.stringify(p));
+    }
+    const hostile = "/".repeat(200000) + "x";   // the pattern CodeQL reported: many '/'
+    const t0 = process.hrtime.bigint();
+    assert.equal(trimTrailingSlashes(hostile), hostile);
+    assert.equal(trimTrailingSlashes("/".repeat(200000)), "");
+    assert.ok(Number(process.hrtime.bigint() - t0) / 1e6 < 200, "hostile paths should trim in well under 200 ms");
 });
 
 test("file names are made display-safe", () => {

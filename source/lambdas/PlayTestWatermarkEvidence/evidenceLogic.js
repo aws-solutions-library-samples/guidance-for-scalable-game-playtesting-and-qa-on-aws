@@ -24,6 +24,17 @@ export class RequestError extends Error {
     }
 }
 
+/**
+ * Remove trailing "/" characters from a request path. A loop rather than a regular
+ * expression, so it runs in linear time on any input (no backtracking).
+ */
+export function trimTrailingSlashes(path) {
+    const s = String(path ?? "");
+    let end = s.length;
+    while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) end--;
+    return s.slice(0, end);
+}
+
 export function isEvidenceId(id) {
     return EVIDENCE_ID.test(String(id ?? ""));
 }

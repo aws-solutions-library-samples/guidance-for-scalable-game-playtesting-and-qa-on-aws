@@ -70,15 +70,25 @@ export function normalizeWatermarkSettings(body) {
     return { watermarkEnabled, watermarkAlpha };
 }
 
-/** Split "s3://bucket/some/prefix" into { bucket, prefix } with prefix ending in "/" (or ""). */
+// Longest s3:// URI we accept: "s3://" + a 63-character bucket name + "/" + a 1,024-byte key.
+const MAX_S3_URI_LENGTH = 5 + 63 + 1 + 1024;
+
+/**
+ * Split "s3://bucket/some/prefix" into { bucket, prefix } with prefix ending in "/" (or "").
+ * Plain string operations rather than a regular expression, so it runs in linear time on
+ * any input (no backtracking), and the input length is bounded.
+ */
 export function parseS3Uri(uri) {
-    const match = /^s3:\/\/([^/]+)\/?(.*)$/i.exec(String(uri ?? "").trim());
-    if (!match || !match[1]) {
-        throw new WatermarkConfigError(`The game location "${uri}" is not an s3:// path.`);
-    }
-    let prefix = match[2];
+    const s = String(uri ?? "").trim();
+    const invalid = () => new WatermarkConfigError(`The game location "${s.slice(0, 200)}" is not an s3:// path.`);
+    if (s.length > MAX_S3_URI_LENGTH || s.slice(0, 5).toLowerCase() !== "s3://") throw invalid();
+    const rest = s.slice(5);
+    const slash = rest.indexOf("/");
+    const bucket = slash < 0 ? rest : rest.slice(0, slash);
+    if (!bucket) throw invalid();
+    let prefix = slash < 0 ? "" : rest.slice(slash + 1);
     if (prefix && !prefix.endsWith("/")) prefix += "/";
-    return { bucket: match[1], prefix };
+    return { bucket, prefix };
 }
 
 /**

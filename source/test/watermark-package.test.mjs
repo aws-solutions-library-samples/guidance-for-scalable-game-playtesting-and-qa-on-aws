@@ -52,6 +52,30 @@ test("parseS3Uri: normalizes the prefix to end with a slash", () => {
     assert.throws(() => parseS3Uri(""), WatermarkConfigError);
 });
 
+test("parseS3Uri: same results as the regex it replaced, on normal input", () => {
+    const old = (uri) => {
+        const m = /^s3:\/\/([^/]+)\/?(.*)$/i.exec(String(uri ?? "").trim());
+        if (!m || !m[1]) return "invalid";
+        let prefix = m[2];
+        if (prefix && !prefix.endsWith("/")) prefix += "/";
+        return { bucket: m[1], prefix };
+    };
+    const cases = ["s3://b", "s3://b/", "s3://b/a", "s3://b/a/", "s3://b//a", "S3://B/x/y.exe", "  s3://b/g/  ", "s3:///x", "s3://", "http://b/x", "", "s3:/b/x", "s3://b/a b/c"];
+    for (const c of cases) {
+        let got;
+        try { got = parseS3Uri(c); } catch { got = "invalid"; }
+        assert.deepEqual(got, old(c), JSON.stringify(c));
+    }
+});
+
+test("parseS3Uri: linear on hostile input and rejects oversized URIs (CodeQL js/polynomial-redos)", () => {
+    const hostile = "s3://." + "..".repeat(540);   // the pattern CodeQL reported, within the length limit
+    const t0 = process.hrtime.bigint();
+    for (let i = 0; i < 1000; i++) parseS3Uri(hostile);
+    assert.ok(Number(process.hrtime.bigint() - t0) / 1e6 < 500, "1,000 hostile parses should take well under 500 ms");
+    assert.throws(() => parseS3Uri("s3://b/" + "a".repeat(2000)), WatermarkConfigError);
+});
+
 test("required keys: Proton needs the layer and its manifest at the package root", () => {
     assert.deepEqual(requiredWatermarkKeys({ sourceUri: "s3://b/game/", runtimeType: "PROTON" }), {
         bucket: "b",

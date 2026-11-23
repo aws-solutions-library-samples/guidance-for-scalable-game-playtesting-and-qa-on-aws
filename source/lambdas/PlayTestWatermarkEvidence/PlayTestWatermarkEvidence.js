@@ -20,7 +20,7 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import {
-    RequestError, isEvidenceId, originalKey, reportKey, lumaKey,
+    RequestError, isEvidenceId, originalKey, reportKey, lumaKey, trimTrailingSlashes,
     validateCreateRequest, validateSessionFilter, summarizeResult, groupSessions,
     MAX_ORIGINAL_BYTES,
 } from "./evidenceLogic.js";
@@ -269,7 +269,7 @@ async function deleteEvidence(evidenceId) {
 
 export const handler = async (event) => {
     const method = event.httpMethod;
-    const path = (event.path || "").replace(/\/+$/, "");
+    const path = trimTrailingSlashes(event.path);
     const username = event.requestContext?.authorizer?.username ?? "unknown";
     const groups = String(event.requestContext?.authorizer?.groups ?? "").split(",");
     try {

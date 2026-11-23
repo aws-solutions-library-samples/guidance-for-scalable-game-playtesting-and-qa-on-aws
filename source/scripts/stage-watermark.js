@@ -56,8 +56,8 @@ async function main() {
     if (runtime === "WINDOWS") {
         if (!exe) fail("--exe is required for Windows games: the path to the game's .exe inside the game folder.");
         if (/^s3:\/\//i.test(exe)) {
-            const e = parseS3Uri(exe.replace(/\/?$/, "/"));
-            const full = e.prefix.replace(/\/$/, "");
+            const e = parseS3Uri(exe.endsWith("/") ? exe : exe + "/");
+            const full = e.prefix.endsWith("/") ? e.prefix.slice(0, -1) : e.prefix;
             if (e.bucket !== bucket || !full.startsWith(prefix)) fail("--exe must be inside the game folder.");
             exe = full.slice(prefix.length);
         }
