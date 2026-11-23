@@ -93,9 +93,9 @@ npm install discord.js
 #### Note: If you plan to publish or verify your bot, only enable permissions that are truly necessary.
 #### Note: You must have Manage Server permission in the chosen server to add bots.
 ---
-## 5. Edit the config.json file with your bot's specifics
-1. Open up the config.json file that is located in the same bot directory
-2. Add the token, clientID, and guildID found within your bot's Developer Portal to the config.json file
+## 5. Create a config.local.json file with your bot's specifics
+1. In the bot directory, make a copy of *config.json* named *config.local.json*. Put your real values in *config.local.json*, not in *config.json*. *config.local.json* is ignored by git, so your bot token and API key are never committed, while *config.json* keeps its placeholder values. Any value in *config.local.json* overrides the one in *config.json*, and the bot warns at startup if a value is still missing.
+2. Add the token, clientID, and guildID found within your bot's Developer Portal to the config.local.json file
    - Token is found underneath the Bot menu.  There is a Reset Token button that you'll need to click to generate a new token
    ![](../../assets/Discord7.png)
 
@@ -106,10 +106,10 @@ npm install discord.js
    ![](../../assets/Discord9.png)
 
 3. Adding the apiBaseUrl and apiKey
-   - apiBaseUrl can be found by going into your AWS console (after installing the playtesting solution) and make sure you've selected the region in which your Playtesting solution backend was installed (Default is us-east-2).  Navigate to Amazon API Gateway then select the *PlaytestingApiStack-playtesting-api* api.  Select *stages* on the left-hand side menu.  Finally, copy the *Invoke URL* from the "prod" stage as seen below.  Copy that to your config file
+   - apiBaseUrl can be found by going into your AWS console (after installing the playtesting solution) and make sure you've selected the region in which your Playtesting solution backend was installed (Default is us-east-2).  Navigate to Amazon API Gateway then select the *PlaytestingApiStack-playtesting-api* api.  Select *stages* on the left-hand side menu.  Finally, copy the *Invoke URL* from the "prod" stage as seen below.  Copy that to your config.local.json file
    ![](../../assets/Discord10.png)
 
-   - apiKey can be found from within the same Amazon API Gateway console location, but this time you'll click on *API Keys* located on the lefthand side menu.  From there, copy the key and save it to your config file as well
+   - apiKey can be found from within the same Amazon API Gateway console location, but this time you'll click on *API Keys* located on the lefthand side menu.  From there, copy the key and save it to your config.local.json file as well
    ![](../../assets/Discord11.png)
 ---
 

@@ -47,6 +47,8 @@ try {
         userPoolId: userPoolId,
         userPoolClientId: webClientId,
         apiEndpoint: apiEndpoint,
+        // Runtimes this deployment built forensic watermark components for ("none" if neither).
+        watermarkRuntimes: cdkOutputs.PlaytestingApiStack.WatermarkRuntimes || "none",
     };
 
     fs.writeFileSync(generatedConfigPath, JSON.stringify(generatedConfig, null, 2) + '\n', 'utf-8');

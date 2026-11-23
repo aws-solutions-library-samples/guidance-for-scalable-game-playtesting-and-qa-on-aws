@@ -12,6 +12,7 @@ import Home from "./Home";
 import PlaySessions from "./PlaySessions";
 import AISummaryChat from "./AISummaryChat";
 import AddNewPlayTest from "./AddNewPlayTest"
+import WatermarkAnalyzer from "./WatermarkAnalyzer"
 
 interface ApplicationProps {
     signOut: any;
@@ -53,7 +54,8 @@ class Application extends React.Component<ApplicationProps & WithAuthenticatorPr
                             text: 'Playtesting Service',
                         }}
                         items={[{ type: 'link', text: `Dashboard`, href: `/dashboard` },
-                            { type: 'link', text: `Manage Play Sessions`, href: `/psessions` }]
+                            { type: 'link', text: `Manage Play Sessions`, href: `/psessions` },
+                            { type: 'link', text: `Watermark Analyzer`, href: `/watermark` }]
                         }
                         onFollow={(event) => {
                             event.preventDefault();
@@ -102,6 +104,7 @@ class Application extends React.Component<ApplicationProps & WithAuthenticatorPr
                                 <Route path="/dashboard" element={<Home setSelectedSessionID={this.setSelectedSessionID} setFilteredObservations={this.setFilteredObservations} />} />
                                 <Route path="/psessions" element={<PlaySessions />} />
                                 <Route path="/addplaytest" element={<AddNewPlayTest />} />
+                                <Route path="/watermark" element={<WatermarkAnalyzer />} />
                             </Routes>
                         </SpaceBetween>
                     </ContentLayout>

@@ -22,6 +22,7 @@ const placeholder = {
     userPoolId: "USERPOOL_PLACEHOLDER",
     userPoolClientId: "CLIENTID_PLACEHOLDER",
     apiEndpoint: "API_ENDPOINT_PLACEHOLDER",
+    watermarkRuntimes: "none",
 };
 
 if (fs.existsSync(generatedConfigPath)) {

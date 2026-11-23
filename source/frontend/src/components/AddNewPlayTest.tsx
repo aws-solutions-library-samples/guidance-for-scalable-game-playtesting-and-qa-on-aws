@@ -12,10 +12,12 @@ import Button from "@cloudscape-design/components/button";
 import TimeInput from "@cloudscape-design/components/time-input";
 
 import { post, get, put } from "aws-amplify/api";
+import { apiErrorMessage } from "./Utility/apiErrorMessage";
+import { watermarkRuntimes } from "../aws-config";
 import S3ResourceSelector from "@cloudscape-design/components/s3-resource-selector";
 import { S3ResourceSelectorProps } from "@cloudscape-design/components/s3-resource-selector";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { RadioGroup, Select, Table, TableProps, Textarea } from "@cloudscape-design/components";
+import { ExpandableSection, RadioGroup, Select, Table, TableProps, Textarea, Toggle } from "@cloudscape-design/components";
 import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
 
@@ -49,7 +51,15 @@ type Bucket = S3ResourceSelectorProps.Bucket; // Alias to match Cloudscape's typ
 type GLS_Application = {
     Id: string;
     Description: string;
+    RuntimeType?: string; // PROTON | WINDOWS | UBUNTU
 };
+
+// Forensic watermarking is supported on these runtimes only (no injection path on Ubuntu).
+const WATERMARK_RUNTIMES = ["PROTON", "WINDOWS"];
+const WATERMARK_ALPHA_MIN = 1;
+const WATERMARK_ALPHA_MAX = 64;
+// Proton 8.0-2c is offered for games but the watermark hasn't been validated on it.
+const WATERMARK_UNVALIDATED_PROTON_VERSIONS = ["20230704"];
 
 type CapacityItem = {
     location: string;
@@ -88,6 +98,11 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
             selectedLocations: ['us-east-2'], // must have at least one
             startTime: "",
             applicationOptions: [],
+            appRuntimeById: {}, // existing game id -> runtime type, for watermark gating
+            watermarkEnabled: false,
+            watermarkAlpha: "8",
+            submitting: false,
+            submitError: "",
             step1Validated: false,
             step2Validated: false,
             step3Validated: false,
@@ -103,7 +118,9 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
             label: app.Description,
             value: app.Id,
         }));
-        this.setState({ applicationOptions: options });
+        const appRuntimeById: { [id: string]: string | undefined } = {};
+        apps.forEach(app => { appRuntimeById[app.Id] = app.RuntimeType; });
+        this.setState({ applicationOptions: options, appRuntimeById });
     }
 
 
@@ -129,6 +146,7 @@ class AddNewPlayTest extends React.Component<{ navigate: (path: string) => void 
                     ? responseBody.map((app: any) => ({
                         Id: app.Id,
                         Description: app.Description,
+                        RuntimeType: app.RuntimeEnvironment?.Type,
                     }))
                     : [];
 
@@ -275,8 +293,53 @@ fetchBuckets = async (): Promise<Bucket[]> => {
 
 
 
+    // The selected game's runtime: from the runtime dropdown for a new game, or from
+    // GameLift Streams for an existing one. Undefined until a game is chosen.
+    selectedRuntime(): { type?: string; version?: string } {
+        if (this.state.selectedOption === "add-new" && this.state.runtimeEnvironment.value) {
+            try {
+                const rt = JSON.parse(this.state.runtimeEnvironment.value);
+                return { type: rt.Type, version: rt.Version };
+            } catch {
+                return {};
+            }
+        }
+        if (this.state.selectedOption === "select-existing" && this.state.applicationSelected.value) {
+            return { type: this.state.appRuntimeById[this.state.applicationSelected.value] };
+        }
+        return {};
+    }
+
+    // Why watermarking can't be turned on for the selected game, or "" if it can.
+    watermarkUnavailableReason(): string {
+        const { type } = this.selectedRuntime();
+        if (type && !WATERMARK_RUNTIMES.includes(type)) {
+            return "Not available for the Ubuntu 22.04 runtime. Forensic watermarking supports Proton and Windows games.";
+        }
+        // A new game gets the components added automatically, which needs them to have
+        // been built for this deployment.
+        if (this.state.selectedOption === "add-new" && type && !watermarkRuntimes.includes(type)) {
+            const name = type === "PROTON" ? "Proton" : "Windows";
+            return `This deployment doesn't include the watermark components for ${name} games. Start Docker (or Finch) and run "npm run deploy-all" again to build them.`;
+        }
+        return "";
+    }
+
+    isWatermarkSupported(): boolean {
+        return this.watermarkUnavailableReason() === "";
+    }
+
+    isWatermarkAlphaValid(): boolean {
+        const raw = String(this.state.watermarkAlpha ?? "").trim();
+        if (raw === "") return true; // blank means the default strength
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= WATERMARK_ALPHA_MIN && n <= WATERMARK_ALPHA_MAX;
+    }
+
     // Submit the playtest session
     submitPlaytestSession = async () => {
+        if (this.state.submitting) return; // avoid creating the game twice
+        const watermarkEnabled = this.state.watermarkEnabled && this.isWatermarkSupported();
         const payload = {
             name: this.state.name,
             game: this.state.game,
@@ -294,11 +357,14 @@ fetchBuckets = async (): Promise<Bucket[]> => {
             capacityConfig: this.state.capacityConfig,
             selectedLocations: this.state.selectedLocations,
             startTime: this.state.startTime,
+            watermarkEnabled,
+            watermarkAlpha: String(this.state.watermarkAlpha ?? "").trim(),
         };
 
         //checking state
         //alert(JSON.stringify(payload));
 
+        this.setState({ submitting: true, submitError: "" });
         try {
             const restOperation = put({
                 apiName: "playtesting-api",
@@ -314,7 +380,10 @@ fetchBuckets = async (): Promise<Bucket[]> => {
             //this.props.navigate("/"); //Redirect back to PlaySessions after submission
         } catch (error) {
             console.error("Error creating playtest session:", error);
-            alert("Failed to create playtest session.");
+            // Show the backend's reason (e.g. a failed watermark package check) instead of a generic alert.
+            this.setState({ submitError: apiErrorMessage(error, "Failed to create playtest session.") });
+        } finally {
+            this.setState({ submitting: false });
         }
     };
 
@@ -352,8 +421,10 @@ fetchBuckets = async (): Promise<Bucket[]> => {
 
         return (
             sg_description.trim() !== "" &&
-            sg_class.value.trim() !== "" &&
-            descriptionPattern.test(sg_description)
+            // sg_class starts as "" before a class is picked, so guard the .value access
+            (sg_class?.value ?? "").trim() !== "" &&
+            descriptionPattern.test(sg_description) &&
+            (!this.state.watermarkEnabled || this.isWatermarkAlphaValid())
         );
     }
 
@@ -497,12 +568,18 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
     render() {
         return (
             <SpaceBetween size="m">
+                {this.state.submitError && (
+                    <Alert type="error" header="The playtest session wasn't created" dismissible onDismiss={() => this.setState({ submitError: "" })}>
+                        {this.state.submitError}
+                    </Alert>
+                )}
                 <Container>
                     <Wizard
                         activeStepIndex={this.state.activeStepIndex}
                         onNavigate={this.handleNavigate}
                         onSubmit={this.submitPlaytestSession}
                         onCancel={this.handleCancel}
+                        isLoadingNextStep={this.state.submitting}
                         i18nStrings={{
                             stepNumberLabel: (stepNumber) => `Step ${stepNumber}`, //Fix applied
                             collapsedStepsLabel: (stepNumber, stepsCount) => `Step ${stepNumber} of ${stepsCount}`,
@@ -685,6 +762,43 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                                 ]}
                                             />
                                         </FormField>
+                                        <FormField
+                                            label="Forensic watermarking"
+                                            description={this.state.selectedOption === "select-existing"
+                                                ? "Adds a near-invisible watermark to every playtester's stream so leaked footage can be traced with the Watermark Analyzer. An existing game can only be watermarked if it was originally added with watermarking on."
+                                                : "Adds a near-invisible watermark to every playtester's stream so leaked footage can be traced with the Watermark Analyzer. The watermark components are added to your game folder automatically when you create the playtest."}
+                                            constraintText={
+                                                !this.isWatermarkSupported()
+                                                    ? this.watermarkUnavailableReason()
+                                                    : this.state.watermarkEnabled && WATERMARK_UNVALIDATED_PROTON_VERSIONS.includes(this.selectedRuntime().version ?? "")
+                                                        ? "Warning: watermarking hasn't been validated on Proton 8.0-2c. Test it before relying on it."
+                                                        : undefined
+                                            }
+                                        >
+                                            <Toggle
+                                                checked={this.state.watermarkEnabled && this.isWatermarkSupported()}
+                                                disabled={!this.isWatermarkSupported()}
+                                                onChange={({ detail }) => this.setState({ watermarkEnabled: detail.checked })}
+                                            >
+                                                Enable forensic watermarking
+                                            </Toggle>
+                                        </FormField>
+                                        {this.state.watermarkEnabled && this.isWatermarkSupported() && (
+                                            <ExpandableSection headerText="Advanced watermark settings">
+                                                <FormField
+                                                    label="Watermark strength"
+                                                    description={`How strongly the mark is applied, from ${WATERMARK_ALPHA_MIN} to ${WATERMARK_ALPHA_MAX}. The default of 8 is a good balance; higher is easier to detect but can become faintly visible on flat areas. Leave blank for the default.`}
+                                                    errorText={this.isWatermarkAlphaValid() ? "" : `Enter a number from ${WATERMARK_ALPHA_MIN} to ${WATERMARK_ALPHA_MAX}.`}
+                                                >
+                                                    <Input
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        value={String(this.state.watermarkAlpha)}
+                                                        onChange={({ detail }) => this.setState({ watermarkAlpha: detail.value })}
+                                                    />
+                                                </FormField>
+                                            </ExpandableSection>
+                                        )}
                                         <FormField label="Stream Configuration">
                                             <Table
                                                 header="Capacity Configuration"
@@ -758,7 +872,17 @@ getColumnDefinitions(): TableProps.ColumnDefinition<CapacityItem>[] {
                                 content: (
                                     <SpaceBetween size="m">
                                         <Alert statusIconAriaLabel="Info">Please review your details before submitting.</Alert>
-                                        <Button onClick={this.submitPlaytestSession} variant="primary">Create Playtest</Button>
+                                        <Box>
+                                            <Box variant="awsui-key-label">Forensic watermarking</Box>
+                                            <div>
+                                                {this.state.watermarkEnabled && this.isWatermarkSupported()
+                                                    ? `On (strength ${String(this.state.watermarkAlpha ?? "").trim() || "8"}). ${this.state.selectedOption === "add-new"
+                                                        ? "The watermark components will be added to your game folder when you create the playtest."
+                                                        : "The selected game will be checked for the watermark components when you create the playtest."}`
+                                                    : "Off"}
+                                            </div>
+                                        </Box>
+                                        <Button onClick={this.submitPlaytestSession} variant="primary" loading={this.state.submitting}>Create Playtest</Button>
                                     </SpaceBetween>
                                 ),
                             },

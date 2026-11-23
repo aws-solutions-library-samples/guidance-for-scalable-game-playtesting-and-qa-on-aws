@@ -110,17 +110,26 @@ async function createUser() {
 
         console.log(`Creating Cognito user: ${username}, ${email}`);
 
-        // Create the user
-        await cognitoClient.send(new AdminCreateUserCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            UserAttributes: [
-                { Name: "email", Value: email },
-                { Name: "email_verified", Value: "true" }
-            ],
-            DesiredDeliveryMediums: ['EMAIL']
-        }));
-        console.log(`User '${username}' created successfully.`);
+        // Create the user. On a redeploy of an existing stack the admin already exists;
+        // that's not a failure, and it must never trigger the rollback below, which
+        // deletes the stacks.
+        let existed = false;
+        try {
+            await cognitoClient.send(new AdminCreateUserCommand({
+                UserPoolId: userPoolId,
+                Username: username,
+                UserAttributes: [
+                    { Name: "email", Value: email },
+                    { Name: "email_verified", Value: "true" }
+                ],
+                DesiredDeliveryMediums: ['EMAIL']
+            }));
+            console.log(`User '${username}' created successfully.`);
+        } catch (createError) {
+            if (createError.name !== "UsernameExistsException") throw createError;
+            existed = true;
+            console.log(`User '${username}' already exists (redeploy); keeping it.`);
+        }
 
         // Add the user to a group
         const groupName = "Admin";
@@ -132,8 +141,12 @@ async function createUser() {
         console.log(`User '${username}' added to group '${groupName}' successfully.`);
 
         console.log('\n=== USER CREATION SUCCESS ===');
-        console.log('Your new user account has been created.');
-        console.log('Please check your email address for your temporary password.');
+        if (existed) {
+            console.log('Your existing admin account is unchanged; sign in with your current password.');
+        } else {
+            console.log('Your new user account has been created.');
+            console.log('Please check your email address for your temporary password.');
+        }
         console.log('===============================');
 
         // Create success marker file

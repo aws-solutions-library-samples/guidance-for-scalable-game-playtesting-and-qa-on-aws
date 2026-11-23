@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require('discord.js');
-const { apiBaseUrl, apiKey } = require('../../config.json');
+const { apiBaseUrl, apiKey } = require('../../config');
 
 module.exports = {
     data: new SlashCommandBuilder()

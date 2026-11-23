@@ -1,12 +1,63 @@
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { GameLiftStreamsClient, CreateApplicationCommand, DeleteStreamGroupCommand } from '@aws-sdk/client-gameliftstreams';
+import { GameLiftStreamsClient, CreateApplicationCommand, DeleteStreamGroupCommand, GetApplicationCommand } from '@aws-sdk/client-gameliftstreams';
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+import { S3Client, HeadObjectCommand, CopyObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from 'uuid'; // Use UUID if you want to generate unique IDs
+import {
+    normalizeWatermarkSettings, assertWatermarkPackage, includeWatermarkComponents, assertNotUnrealLauncher,
+    COMPONENT_METADATA_KEY, COMPONENT_METADATA_VALUE,
+} from './watermark.js';
 
 const dynamo = DynamoDBDocument.from(new DynamoDB());
 const client = new GameLiftStreamsClient();
 const sfnclient = new SFNClient();
+// Game buckets can be in any region, so follow S3's region redirects.
+const s3 = new S3Client({ followRegionRedirects: true });
+
+const headObject = (bucket, key) => s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+
+// Object keys in a game package (bounded, so a huge package can't stall the request).
+async function listKeys(bucket, prefix) {
+    const keys = [];
+    let ContinuationToken;
+    for (let page = 0; page < 20; page++) {
+        const out = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken }));
+        keys.push(...(out.Contents ?? []).map((o) => o.Key));
+        if (!out.IsTruncated) break;
+        ContinuationToken = out.NextContinuationToken;
+    }
+    return keys;
+}
+
+// Runtimes this deployment built watermark components for (set by the stack).
+const WATERMARK_PAYLOAD_RUNTIMES = String(process.env.WATERMARK_RUNTIMES ?? "").split(",").filter(Boolean);
+const payloadS3 = {
+    head: headObject,
+    copy: (srcBucket, srcKey, dstBucket, dstKey) => s3.send(new CopyObjectCommand({
+        Bucket: dstBucket,
+        Key: dstKey,
+        CopySource: `${srcBucket}/${srcKey.split("/").map(encodeURIComponent).join("/")}`,
+        MetadataDirective: "REPLACE",
+        Metadata: { [COMPONENT_METADATA_KEY]: COMPONENT_METADATA_VALUE },
+    })),
+};
+
+// Check that an existing GameLift Streams application's package can be watermarked.
+async function assertExistingAppWatermarkable(applicationId) {
+    if (!applicationId) {
+        throw new Error("Couldn't determine the playtest session's game to check it for the watermark components.");
+    }
+    const app = await client.send(new GetApplicationCommand({ Identifier: applicationId }));
+    const pkg = {
+        sourceUri: app.ApplicationSourceUri,
+        executablePath: app.ExecutablePath,
+        runtimeType: app.RuntimeEnvironment?.Type,
+        existingApplication: true,
+    };
+    await assertWatermarkPackage(pkg, headObject);
+    await assertNotUnrealLauncher(pkg, listKeys);
+}
 
 /**
  * Demonstrates a simple HTTP endpoint using API Gateway. You have full
@@ -71,6 +122,14 @@ export const handler = async (event) => {
                     throw new Error("Missing playtestingID in the request body.");
                 }
 
+                // Validate the watermark settings, and refuse to turn watermarking on
+                // for a game whose package lacks the host components.
+                const updateWatermark = normalizeWatermarkSettings(requestBody);
+                if (updateWatermark.watermarkEnabled) {
+                    // playtestingID is "<pt-uuid or stream group id>--<application id>"
+                    await assertExistingAppWatermarkable(String(requestBody.playtestingID).split("--")[1]);
+                }
+
                 const updateFields = { ...requestBody };
                 delete updateFields.playtestingID; // don't try to update the primary key
 
@@ -104,7 +163,9 @@ export const handler = async (event) => {
                             startDate = :startDate,
                             startTime = :startTime,
                             studio = :studio,
-                            observations = :observations
+                            observations = :observations,
+                            watermarkEnabled = :watermarkEnabled,
+                            watermarkAlpha = :watermarkAlpha
                     `,
                     ExpressionAttributeNames: {
                         "#status": "status",
@@ -119,6 +180,8 @@ export const handler = async (event) => {
                         ":startTime": requestBody.startTime,
                         ":studio": requestBody.studio,
                         ":observations": requestBody.observations,
+                        ":watermarkEnabled": updateWatermark.watermarkEnabled,
+                        ":watermarkAlpha": updateWatermark.watermarkAlpha,
                     },
                     ReturnValues: "UPDATED_NEW",
                 });
@@ -141,6 +204,38 @@ export const handler = async (event) => {
                 //if (!newSession.playtestingID) {
                 //    throw new Error("Missing playtestingID in the request body.");
                 //}
+
+                // Validate the watermark settings and, if watermarking is on, check the
+                // game package BEFORE creating anything, so a rejected request leaves no
+                // GameLift Streams application or stream group behind.
+                const newWatermark = normalizeWatermarkSettings(newSession);
+                if (newWatermark.watermarkEnabled) {
+                    if (newSession.applicationSelected == "") {
+                        let runtimeType;
+                        try {
+                            runtimeType = JSON.parse(newSession.runtimeEnvironment).Type;
+                        } catch {
+                            throw new Error("The game's runtime environment is missing or invalid.");
+                        }
+                        const pkg = {
+                            sourceUri: newSession.s3Path,
+                            executablePath: String(newSession.executionS3Path ?? "").replace(newSession.s3Path, ''),
+                            runtimeType,
+                            existingApplication: false,
+                        };
+                        // Add the components to the game folder, then confirm they're there.
+                        await assertNotUnrealLauncher(pkg, listKeys);
+                        const added = await includeWatermarkComponents({
+                            ...pkg,
+                            availableRuntimes: WATERMARK_PAYLOAD_RUNTIMES,
+                            payloadBucket: process.env.WATERMARK_PAYLOAD_BUCKET,
+                        }, payloadS3);
+                        console.log("Added the watermark components to the game package:", added.join(", "));
+                        await assertWatermarkPackage(pkg, headObject);
+                    } else {
+                        await assertExistingAppWatermarkable(newSession.applicationSelected);
+                    }
+                }
 
                 //needed outside if statement
                 let appResponse = "";
@@ -189,6 +284,8 @@ export const handler = async (event) => {
                     startTime: newSession.startTime,
                     enabled: newSession.enabled,
                     observations: newSession.observations,
+                    watermarkEnabled: newWatermark.watermarkEnabled,
+                    watermarkAlpha: newWatermark.watermarkAlpha,
                     status: "Initializing" //status: Initializing, Active, Deleting
                 };
 

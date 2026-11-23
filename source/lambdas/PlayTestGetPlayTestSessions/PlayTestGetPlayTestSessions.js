@@ -12,14 +12,19 @@ export const handler = async (event) => {
         // Define the scan parameters
         const params = {
             TableName: process.env.PLAYTESTSESSION_TABLE,
-            FilterExpression: "#endDate >= :today AND #enabled = :enabled",
+            // Only ACTIVE sessions: while a session is still initializing its id is
+            // temporary (it changes when the stream group is ready), so a registration
+            // made against it would produce a playtest link that stops working.
+            FilterExpression: "#endDate >= :today AND #enabled = :enabled AND #status = :active",
             ExpressionAttributeNames: {
                 "#endDate": "endDate",     // Name of the endDate attribute
                 "#enabled": "enabled",     // Name of the enabled flag
+                "#status": "status",
             },
             ExpressionAttributeValues: {
                 ":today": today,        // Today's date for comparison
                 ":enabled": true,       // Only fetch items where enabled is true
+                ":active": "ACTIVE",
             },
         };
 

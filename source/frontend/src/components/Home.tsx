@@ -33,6 +33,7 @@ interface PlaytestSession {
     studio: string;
     observations: string;
     status: string;
+    watermarkEnabled?: boolean; // absent on sessions created before watermarking existed
 }
 
 interface Playtester {
@@ -197,6 +198,7 @@ class Home extends React.Component<HomeProps, HomeState> {
                             { id: "startTime", header: "Start Time", cell: (item) => item.startTime },
                             { id: "endDate", header: "End Date", cell: (item) => item.endDate },
                             { id: "enabled", header: "Enabled", cell: (item) => (item.enabled ? "Yes" : "No") },
+                            { id: "watermarkEnabled", header: "Watermarked", cell: (item) => (item.watermarkEnabled ? "Yes" : "No") },
                             {
                                 id: "status",
                                 header: "Status",
