@@ -158,6 +158,8 @@ Each time a playtester starts a stream, the backend generates a new random 128-b
 
 The playtester is identified from their signed-in account, not from anything their browser sends, and each playtester can only stream a session they registered for themselves. Admins can stream any session for testing; an admin's stream is recorded under the admin's username and flagged as an admin stream.
 
+If the watermark can't be applied when a stream starts, the stream doesn't start: a session with watermarking on never streams without a mark. The playtester sees *Couldn't prepare the watermark for this stream* (a temporary problem; trying again usually works) or *This playtest session's game can't be watermarked* (contact the studio; the admin should check the session's game).
+
 ### Supported runtimes
 
 | Runtime | Supported | How the mark is added |
@@ -247,7 +249,7 @@ After successfully logging in you will be routed to the home page/Dashboard.  On
 - Start Date: The date that you wish the playtest session to be available.
 - End Date:  The date tht you wish the playtest session to end (this is an inclusive date).
 - Enabled: Is this playtest session currently enabled?
-- Forensic Watermarking: Does this playtest session add a per-playtester forensic watermark to every stream? (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking))
+- Watermarked: Does this playtest session add a per-playtester forensic watermark to every stream? Shown on the Dashboard and on Manage Play Sessions (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking))
 - Status: A playtest session could be in various status (Active, Error, Intializing)
 
 
@@ -286,11 +288,29 @@ On step 3 you are setting up your streaming details.  This includes creating a s
 
 ![](assets/Manage_CreateNew4.png)
 
-Also on this step you can turn on *Forensic watermarking* for the playtest session. When it's on, every playtester's stream carries a near-invisible watermark that identifies them, which you can later check with the [Watermark Analyzer](#watermark-analyzer). The toggle is only available for Proton and Windows runtimes. For a game you're adding with *Add New Game*, the watermark components are added to its folder for you; an existing game can only be watermarked if it was originally added with watermarking on (see [Enabling Forensic Watermarking](#enabling-forensic-watermarking)). *Advanced watermark settings* lets you change the mark's strength (1 to 64, default 8); leave it at the default unless testing shows you need a stronger or fainter mark. If something prevents the components from being added or found, the playtest isn't created and the error explains why. You can also turn watermarking on or off later when updating a playtest session. The change applies to streams started after you save it.
+Also on this step you can turn on forensic watermarking for the playtest session. When it's on, every playtester's stream carries a near-invisible watermark that identifies them, which you can later check with the [Watermark Analyzer](#watermark-analyzer). Setup is covered in [Enabling Forensic Watermarking](#enabling-forensic-watermarking). The settings are:
+
+| Setting | What it does |
+|---|---|
+| **Forensic watermarking** (*Enable forensic watermarking* toggle) | Turns watermarking on for this playtest session. With *Add New Game*, the watermark components are added to your game folder when you click *Create Playtest*. With *Select Existing Game*, the game must have been added with watermarking on originally. The toggle is greyed out, with the reason shown under it, for Ubuntu games and for runtimes this deployment didn't build components for. For Proton 8.0-2c a warning reminds you the watermark hasn't been validated on it. |
+| **Advanced watermark settings** → **Watermark strength** | How strongly the mark is applied, from 1 to 64. Leave it blank for the default of 8, which suits most games. A higher value is easier to detect in heavily compressed footage but can become faintly visible on large flat areas; a lower value is harder to see but harder to detect. Change it only if testing with your own game shows you need to. |
+
+The final *Confirm & Submit* step shows whether watermarking is on, at what strength, and whether the components will be added to your game folder or checked in the existing game.
+
+If watermarking can't be set up, the playtest isn't created and a red banner at the top of the wizard explains why:
+
+| Message starts with | What it means and what to do |
+|---|---|
+| *This deployment doesn't include the forensic watermark components…* | `deploy-all` ran without Docker or Finch, so there's nothing to add to the game. Start Docker (or Finch) and run `npm run deploy-all` again. |
+| *This game was added without the forensic watermark components…* | You chose *Select Existing Game* for a game added without watermarking. Use *Add New Game* with the same game folder instead. |
+| *…looks like an Unreal Engine launcher…* | You chose the small launcher `.exe` of an Unreal Engine Windows game. Choose the shipping executable the message names. |
+| *The game folder already contains … which wasn't added by this solution…* | The game ships its own `dxgi.dll`, which the solution won't overwrite. This game can't be watermarked on Windows. |
+| *…access to s3://… was denied* or *writing to s3://… was denied* | The solution couldn't read or write the game's S3 folder. Check the bucket's policy and encryption settings. |
+| *Forensic watermarking isn't supported on the Ubuntu 22.04 runtime…* | Watermarking supports Proton and Windows games only. |
 
 Step 4 we are selecting the start date, start time, and end date of the playtest session.  If playtesters try to playtest outside of this range they will not be able to.  After setting your playtest date range navigate to the next step.
 
-**NOTE:  Currently if a playtester is playing a session while a session has expired or was marked disabled, the playtester will still be able to play.  Only when the playtester refreshes the screen will the changes be seen**
+**NOTE:  Currently if a playtester is playing a session while a session has expired or was marked disabled, the playtester will still be able to play.  Only when the playtester refreshes the screen will the changes be seen. Starting a new stream is refused once a session is disabled or outside its dates (admins can still stream it for testing)**
 
 ![](assets/Manage_CreateNew5.png)
 
@@ -326,7 +346,9 @@ Now lets navigate back to managing your platest sessions and let's make some adj
 
 ![](assets/Manage_Updating.png)
 
-Note above all the fields that are editable.  Any changes made above will only take affect after clicking the *Update Playtest Session* button.  The screen will not refresh nor will you be navigated to a different page; but instead at the top you should see a green status message indicating that the update was made.  Make any updates you wish then navigate back to the Dashboard page to see them on the dashboard screen.
+Note above all the fields that are editable.  Any changes made above will only take affect after clicking the *Update Playtest Session* button.
+
+The edit form also has the *Forensic watermarking* toggle and *Watermark strength*. Changes apply to streams started after you save; a stream that's already running keeps the watermark it started with. You can always turn watermarking **off**. You can only turn it **on** if the session's game was added with watermarking, because a GameLift Streams game can't be changed after it's created; otherwise the update is refused with the same explanation as in the wizard, and nothing is saved.  The screen will not refresh nor will you be navigated to a different page; but instead at the top you should see a green status message indicating that the update was made.  Make any updates you wish then navigate back to the Dashboard page to see them on the dashboard screen.
 
 Let's say that this playtest is finished and you do not wish to keep it any longer.  Navigate back to manging your playtest sessions and select the playtest session you wish to delete.  After clicking delete you will be asked for confirmation before your deletion is made.
 
@@ -356,7 +378,7 @@ The Watermark Analyzer identifies which playtester and playtest session a piece 
 
 1. Click *Watermark Analyzer* on the left side of the screen.
 
-2. Select the playtest session you believe the footage came from. The list shows every session that has had at least one watermarked stream, including sessions you have since deleted. If you are not sure, choose *All sessions*. Narrowing to one session is faster and gives the most reliable result.
+2. Select the playtest session you believe the footage came from. The list shows every session that has had at least one watermarked stream, including sessions you have since deleted; each entry shows its game, how many watermarked streams were recorded and when the last one started. If you are not sure, choose *All sessions*. Narrowing to one session is faster and gives the most reliable result.
 
 3. Upload a screenshot of the footage (PNG, JPEG or WebP). For the best results:
     - Use the highest-quality frame you can get: pause the video at full screen at its highest resolution rather than capturing a thumbnail.
@@ -366,17 +388,69 @@ The Watermark Analyzer identifies which playtester and playtest session a piece 
 
 4. Click *Analyze*. The analyzer first checks whether the image is at its original scale, which takes a few seconds. If it isn't (common for screenshots and photos of a screen), it also searches a range of scales, which can take up to about 20 seconds.
 
-5. Review the result:
-    - **Watermark identified:** shows the playtester (their Discord username), the playtest session and game, when and where they started the stream, and a detection score. A score above the threshold of 8 is a match; a genuine match typically scores far higher (often 100 or more on a clean capture), while unrelated playtesters score around 5. The gap between the top result and the runner-up is also shown; a large gap means a clear identification.
-    - **No watermark found:** no recorded seed scored above the threshold. Common reasons: the session was not watermarked, the wrong playtest session was selected, the image was rotated at an angle, or the image is too small, blurry or heavily processed. Try *All sessions*, or a different, sharper frame.
+5. Review the result. It's shown under *Result* and saved as evidence automatically. There are three possible outcomes:
+    - **Watermark identified: *playtester*.** A recorded stream's watermark was found in the image.
+    - **No watermark found.** No recorded stream scored above the match threshold. Common reasons: the session wasn't watermarked, the wrong playtest session was selected (try *All sessions*), the image is rotated at an angle, or the frame is too small, blurry, dark or heavily processed. Try a sharper frame at full resolution.
+    - **Nothing to compare against.** No watermarked streams have been recorded for the selected session (or at all). Watermark records are created each time a playtester starts a stream in a watermarked session.
 
-A *Details* panel lists the closest candidates and how the image was processed, which helps when a result is borderline.
+#### Reading an identification
+
+The match comes with a plain-language confidence line:
+
+| Confidence | Meaning |
+|---|---|
+| **Strong match** | The score is far above the threshold and far above every other playtester. This is the normal result for a clear screenshot. |
+| **Clear match** | The score is well above the threshold and clearly separated from every other playtester. |
+| **Weak match** | The score is only just above the threshold. Try a sharper, higher-resolution frame to confirm before acting on it. |
+
+If the stream was started by an admin account rather than a playtester (for example while testing the build), the result says so.
+
+The result card shows:
+
+| Field | Meaning |
+|---|---|
+| Playtester | The username of the person who was signed in when the stream started (their Discord username for playtesters). |
+| Playtest session | The session's name when the stream started. It's kept even if the session is later renamed or deleted. |
+| Game | The game and studio from the playtest session. |
+| Stream started | When the identified stream started. |
+| Stream region | The AWS Region the stream ran in. |
+| Detection score | How strongly the watermark was found. A score above the match threshold of 8 is a match; a real match usually scores far higher (often 100 or more on a clean capture), and unrelated streams score around 5. |
+| Gap to next playtester | How far ahead the top score is of the next-best stream. A large gap means the identification is unambiguous. |
+| Watermarked streams compared | How many recorded streams the image was checked against. |
+| Session ID | The playtest session's ID, for matching against the Dashboard or AWS records. |
+
+#### The Details panel
+
+Expand *Details* to see how the image was analyzed, which helps when a result is borderline or needs to be explained to someone else:
+
+| Field | Meaning |
+|---|---|
+| Analyzed image | The size of the image after letterbox trimming and resampling. |
+| Watermark tiles folded | How many 256 x 256 pixel tiles were combined. More tiles give a stronger result. |
+| Scale used | The scale at which the watermark was found, and how many scales were searched if a search was needed. |
+| Analysis time | How long the analysis took. |
+| Original file | The file name and size of the screenshot you uploaded. |
+| SHA-256 of original | A fingerprint of the uploaded file. Anyone can recompute it from the file to show it hasn't been altered. |
+| Closest candidates | The highest-scoring recorded streams, with their score, playtester, session and start time. A real match scores far above everything else in this list. |
 
 ![](assets/WatermarkAnalyzer1.png)
 
 #### Managing evidence
 
-Every analysis is saved as an evidence record: the screenshot you uploaded, the result, which admin ran it, when, and a SHA-256 fingerprint of the file so you can show it hasn't been altered. Saved records appear in the *Evidence* list on the Watermark Analyzer page, where you can open one to review the screenshot and result again. Evidence is kept until you delete it, so once an investigation is settled, select the records and click *Delete*. This permanently removes the screenshots and results.
+Every analysis is saved as an evidence record: the screenshot you uploaded, the result, which admin ran it, when, and a SHA-256 fingerprint of the file so you can show it hasn't been altered. Saved records appear in the *Evidence* table at the bottom of the Watermark Analyzer page, newest first:
+
+| Column | Meaning |
+|---|---|
+| Date | When the screenshot was uploaded. |
+| Screenshot | The uploaded file's name. Click it to open the record. |
+| Result | *Watermark identified*, *No watermark found* or *No watermarked streams* (the three outcomes above), or *Not analyzed* / *Analysis failed* if the upload or analysis didn't complete. |
+| Identified playtester / Session | Who and which session was identified, if anyone. |
+| Score | The top detection score. |
+| Run by | The admin who ran the analysis. |
+
+To review a record, click its file name, or select it and click *View*. This shows when it was uploaded and analyzed and by whom, which sessions it was compared against, the screenshot itself, and the full result and Details. Use the refresh button to update the table.
+
+Evidence is kept until you delete it. Once an investigation is settled, select the records (one or many) and click *Delete*, then *Delete permanently*. This permanently removes the screenshots and results and can't be undone.
 
 ![](assets/WatermarkAnalyzer2.png)
 
@@ -461,6 +535,6 @@ This deletes all stacks (`PlaytestSolution`, `PlaytestingApiStack` in us-east-2,
 
 **NOTE: This is a destructive operation. It removes the Cognito user pool (including the admin user), the DynamoDB tables (including any playtest/playtester data), the S3 buckets and their contents, and the CloudFront distribution.**
 
-**NOTE: If you used forensic watermarking, tearing down the solution also deletes the watermark seed records and all saved evidence (screenshots and results). Without the seed records, footage from those playtests can no longer be traced. If you want to keep any of this, copy it somewhere outside the solution before running `destroy-all`; anything you copy elsewhere is not touched by the teardown. The watermark files you staged into your own game's S3 folder are also not removed; delete the `wmlayer/` and `xdg/` folders (Proton) or `dxgi.dll` (Windows) yourself if you no longer need them.**
+**NOTE: If you used forensic watermarking, tearing down the solution also deletes the watermark seed records and all saved evidence (screenshots and results). Without the seed records, footage from those playtests can no longer be traced. If you want to keep any of this, copy it somewhere outside the solution before running `destroy-all`; anything you copy elsewhere is not touched by the teardown. The watermark files that were added to your own game's S3 folder are also not removed; delete the `wmlayer/` and `xdg/` folders (Proton) or `dxgi.dll` next to the game's executable (Windows) yourself if you no longer need them.**
 
 Redeploying after a teardown is painless: just run `npm run deploy-all` again. The deployment writes the new stack values into a generated config file (`frontend/src/aws-config.generated.json`), so there is nothing to manually reset between a destroy and a fresh deploy.
